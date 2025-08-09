@@ -618,11 +618,75 @@ function Main({ appName, aboutText } :any) {
     const [showWatermarkEditor, setShowWatermarkEditor] = useState<boolean>(false);
     const [showSignatureEditor, setShowSignatureEditor] = useState<boolean>(false);
 
-    // Watermark/Signature/Border state
+    // Multiple Watermarks and Signatures with individual controls
+    const [watermarks, setWatermarks] = useState<Array<{
+        id: string;
+        text: string;
+        image: string;
+        opacity: number;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        rotation: number;
+        fontSize: number;
+        fontFamily: string;
+        isBold: boolean;
+        isItalic: boolean;
+        textAlign: string;
+        textColor: string;
+    }>>([{
+        id: 'watermark-1',
+        text: 'WATERMARK',
+        image: '',
+        opacity: 70,
+        position: { x: 80, y: 90 },
+        size: { width: 200, height: 50 },
+        rotation: 0,
+        fontSize: 24,
+        fontFamily: 'Arial',
+        isBold: false,
+        isItalic: false,
+        textAlign: 'center',
+        textColor: '#FFFFFF'
+    }]);
+
+    const [signatures, setSignatures] = useState<Array<{
+        id: string;
+        text: string;
+        image: string;
+        opacity: number;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        rotation: number;
+        fontSize: number;
+        fontFamily: string;
+        isBold: boolean;
+        isItalic: boolean;
+        textAlign: string;
+        textColor: string;
+    }>>([{
+        id: 'signature-1',
+        text: '',
+        image: '',
+        opacity: 80,
+        position: { x: 5, y: 95 },
+        size: { width: 150, height: 40 },
+        rotation: 0,
+        fontSize: 18,
+        fontFamily: 'cursive',
+        isBold: false,
+        isItalic: true,
+        textAlign: 'center',
+        textColor: '#000000'
+    }]);
+
+    const [activeElement, setActiveElement] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
+    const [selectedElementForEdit, setSelectedElementForEdit] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
+
+    // Backward compatibility states
     const [watermarkOpacity, setWatermarkOpacity] = useState<number>(70);
     const [signatureOpacity, setSignatureOpacity] = useState<number>(80);
-    const [watermarkPosition, setWatermarkPosition] = useState({ x: 80, y: 90 }); // Percentage-based position
-    const [signaturePosition, setSignaturePosition] = useState({ x: 5, y: 95 }); // Percentage-based position
+    const [watermarkPosition, setWatermarkPosition] = useState({ x: 80, y: 90 });
+    const [signaturePosition, setSignaturePosition] = useState({ x: 5, y: 95 });
     const [watermarkSize, setWatermarkSize] = useState({ width: 200, height: 50 });
     const [signatureSize, setSignatureSize] = useState({ width: 150, height: 40 });
     const [watermarkImage, setWatermarkImage] = useState<string>('');
@@ -641,6 +705,20 @@ function Main({ appName, aboutText } :any) {
     const [currentPreviewIndex, setCurrentPreviewIndex] = useState<number>(0);
     const [previewHistory, setPreviewHistory] = useState<string[]>([]);
     const [previewHistoryIndex, setPreviewHistoryIndex] = useState<number>(0);
+    const [qualityHistory, setQualityHistory] = useState<Array<{
+        timestamp: number;
+        selectedFilter: any;
+        adjustmentValues: any;
+        watermarks: any[];
+        signatures: any[];
+        enableWatermark: boolean;
+        enableSignature: boolean;
+        enableBorder: boolean;
+        borderWidth: number;
+        borderColor: string;
+        previewImage: string;
+    }>>([]);
+    const [qualityHistoryIndex, setQualityHistoryIndex] = useState<number>(-1);
 
     const inputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
@@ -948,49 +1026,90 @@ function Main({ appName, aboutText } :any) {
     const addWatermark = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableWatermark) return;
 
-        const centerX = (watermarkPosition.x / 100) * canvas.width;
-        const centerY = (watermarkPosition.y / 100) * canvas.height;
+        // Apply all watermarks
+        watermarks.forEach((watermark) => {
+            if (!watermark.text?.trim() && !watermark.image) return;
 
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate((watermarkRotation * Math.PI) / 180);
-        ctx.globalAlpha = watermarkOpacity / 100;
+            const centerX = (watermark.position.x / 100) * canvas.width;
+            const centerY = (watermark.position.y / 100) * canvas.height;
 
-        if (watermarkImage) {
-            const img = new Image();
-            img.onload = () => {
-                ctx.drawImage(img, -watermarkSize.width / 2, -watermarkSize.height / 2, watermarkSize.width, watermarkSize.height);
-                ctx.restore(); // Restore after image load
-            };
-            img.onerror = () => {
-                console.error("Failed to load watermark image");
-                ctx.restore();
-            };
-            img.src = watermarkImage;
-        } else if (watermarkText?.trim()) {
-            // Enhanced text styling
-            const scaledFontSize = Math.max(canvas.width / 800 * watermarkFontSize, 12);
-            const fontWeight = watermarkIsBold ? 'bold' : 'normal';
-            const fontStyle = watermarkIsItalic ? 'italic' : 'normal';
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate((watermark.rotation * Math.PI) / 180);
+            ctx.globalAlpha = watermark.opacity / 100;
 
-            ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${watermarkFontFamily}`;
-            ctx.fillStyle = watermarkTextColor;
-            ctx.strokeStyle = watermarkTextColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
-            ctx.lineWidth = 1;
-            ctx.textAlign = watermarkTextAlign as CanvasTextAlign;
-            ctx.textBaseline = 'middle';
+            if (watermark.image) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, -watermark.size.width / 2, -watermark.size.height / 2, watermark.size.width, watermark.size.height);
+                };
+                img.onerror = () => {
+                    console.error("Failed to load watermark image");
+                };
+                img.src = watermark.image;
+            } else if (watermark.text?.trim()) {
+                const scaledFontSize = Math.max(canvas.width / 800 * watermark.fontSize, 12);
+                const fontWeight = watermark.isBold ? 'bold' : 'normal';
+                const fontStyle = watermark.isItalic ? 'italic' : 'normal';
 
-            // Add text shadow effect
-            ctx.shadowColor = watermarkTextColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
-            ctx.shadowBlur = 3;
-            ctx.shadowOffsetX = 1;
-            ctx.shadowOffsetY = 1;
+                ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${watermark.fontFamily}`;
+                ctx.fillStyle = watermark.textColor;
+                ctx.strokeStyle = watermark.textColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 1;
+                ctx.textAlign = watermark.textAlign as CanvasTextAlign;
+                ctx.textBaseline = 'middle';
 
-            ctx.strokeText(watermarkText, 0, 0);
-            ctx.fillText(watermarkText, 0, 0);
+                ctx.shadowColor = watermark.textColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
+                ctx.shadowBlur = 3;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+
+                ctx.strokeText(watermark.text, 0, 0);
+                ctx.fillText(watermark.text, 0, 0);
+            }
             ctx.restore();
-        } else {
-             ctx.restore();
+        });
+
+        // Backward compatibility - apply legacy watermark if exists
+        if ((watermarkText?.trim() || watermarkImage) && watermarks.length === 1) {
+            const centerX = (watermarkPosition.x / 100) * canvas.width;
+            const centerY = (watermarkPosition.y / 100) * canvas.height;
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate((watermarkRotation * Math.PI) / 180);
+            ctx.globalAlpha = watermarkOpacity / 100;
+
+            if (watermarkImage) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, -watermarkSize.width / 2, -watermarkSize.height / 2, watermarkSize.width, watermarkSize.height);
+                };
+                img.onerror = () => {
+                    console.error("Failed to load watermark image");
+                };
+                img.src = watermarkImage;
+            } else if (watermarkText?.trim()) {
+                const scaledFontSize = Math.max(canvas.width / 800 * watermarkFontSize, 12);
+                const fontWeight = watermarkIsBold ? 'bold' : 'normal';
+                const fontStyle = watermarkIsItalic ? 'italic' : 'normal';
+
+                ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${watermarkFontFamily}`;
+                ctx.fillStyle = watermarkTextColor;
+                ctx.strokeStyle = watermarkTextColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 1;
+                ctx.textAlign = watermarkTextAlign as CanvasTextAlign;
+                ctx.textBaseline = 'middle';
+
+                ctx.shadowColor = watermarkTextColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
+                ctx.shadowBlur = 3;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+
+                ctx.strokeText(watermarkText, 0, 0);
+                ctx.fillText(watermarkText, 0, 0);
+            }
+            ctx.restore();
         }
     };
 
@@ -1024,60 +1143,180 @@ function Main({ appName, aboutText } :any) {
     const addSignature = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableSignature) return;
 
-        const centerX = (signaturePosition.x / 100) * canvas.width;
-        const centerY = (signaturePosition.y / 100) * canvas.height;
+        // Apply all signatures
+        signatures.forEach((signature) => {
+            if (!signature.text?.trim() && !signature.image) return;
 
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate((signatureRotation * Math.PI) / 180);
-        ctx.globalAlpha = signatureOpacity / 100;
+            const centerX = (signature.position.x / 100) * canvas.width;
+            const centerY = (signature.position.y / 100) * canvas.height;
 
-        if (signatureImage) {
-            const img = new Image();
-            img.onload = () => {
-                ctx.drawImage(img, -signatureSize.width / 2, -signatureSize.height / 2, signatureSize.width, signatureSize.height);
-                ctx.restore();
-            };
-            img.onerror = () => {
-                console.error("Failed to load signature image");
-                ctx.restore();
-            };
-            img.src = signatureImage;
-        } else if (signatureText?.trim()) {
-            // Enhanced text styling
-            const scaledFontSize = Math.max(canvas.width / 800 * signatureFontSize, 10);
-            const fontWeight = signatureIsBold ? 'bold' : 'normal';
-            const fontStyle = signatureIsItalic ? 'italic' : 'normal';
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate((signature.rotation * Math.PI) / 180);
+            ctx.globalAlpha = signature.opacity / 100;
 
-            ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${signatureFontFamily}`;
-            ctx.fillStyle = signatureTextColor;
-            ctx.strokeStyle = signatureTextColor === '#000000' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
-            ctx.lineWidth = 0.5;
-            ctx.textAlign = signatureTextAlign as CanvasTextAlign;
-            ctx.textBaseline = 'middle';
+            if (signature.image) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, -signature.size.width / 2, -signature.size.height / 2, signature.size.width, signature.size.height);
+                };
+                img.onerror = () => {
+                    console.error("Failed to load signature image");
+                };
+                img.src = signature.image;
+            } else if (signature.text?.trim()) {
+                const scaledFontSize = Math.max(canvas.width / 800 * signature.fontSize, 10);
+                const fontWeight = signature.isBold ? 'bold' : 'normal';
+                const fontStyle = signature.isItalic ? 'italic' : 'normal';
 
-            // Add subtle text shadow
-            ctx.shadowColor = signatureTextColor === '#000000' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
-            ctx.shadowBlur = 2;
-            ctx.shadowOffsetX = 0.5;
-            ctx.shadowOffsetY = 0.5;
+                ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${signature.fontFamily}`;
+                ctx.fillStyle = signature.textColor;
+                ctx.strokeStyle = signature.textColor === '#000000' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+                ctx.lineWidth = 0.5;
+                ctx.textAlign = signature.textAlign as CanvasTextAlign;
+                ctx.textBaseline = 'middle';
 
-            ctx.strokeText(signatureText, 0, 0);
-            ctx.fillText(signatureText, 0, 0);
+                ctx.shadowColor = signature.textColor === '#000000' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 2;
+                ctx.shadowOffsetX = 0.5;
+                ctx.shadowOffsetY = 0.5;
+
+                ctx.strokeText(signature.text, 0, 0);
+                ctx.fillText(signature.text, 0, 0);
+            }
             ctx.restore();
-        } else {
+        });
+
+        // Backward compatibility - apply legacy signature if exists
+        if ((signatureText?.trim() || signatureImage) && signatures.length === 1) {
+            const centerX = (signaturePosition.x / 100) * canvas.width;
+            const centerY = (signaturePosition.y / 100) * canvas.height;
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate((signatureRotation * Math.PI) / 180);
+            ctx.globalAlpha = signatureOpacity / 100;
+
+            if (signatureImage) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, -signatureSize.width / 2, -signatureSize.height / 2, signatureSize.width, signatureSize.height);
+                };
+                img.onerror = () => {
+                    console.error("Failed to load signature image");
+                };
+                img.src = signatureImage;
+            } else if (signatureText?.trim()) {
+                const scaledFontSize = Math.max(canvas.width / 800 * signatureFontSize, 10);
+                const fontWeight = signatureIsBold ? 'bold' : 'normal';
+                const fontStyle = signatureIsItalic ? 'italic' : 'normal';
+
+                ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${signatureFontFamily}`;
+                ctx.fillStyle = signatureTextColor;
+                ctx.strokeStyle = signatureTextColor === '#000000' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+                ctx.lineWidth = 0.5;
+                ctx.textAlign = signatureTextAlign as CanvasTextAlign;
+                ctx.textBaseline = 'middle';
+
+                ctx.shadowColor = signatureTextColor === '#000000' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 2;
+                ctx.shadowOffsetX = 0.5;
+                ctx.shadowOffsetY = 0.5;
+
+                ctx.strokeText(signatureText, 0, 0);
+                ctx.fillText(signatureText, 0, 0);
+            }
             ctx.restore();
         }
     };
 
+    // Add new watermark
+    const addNewWatermark = () => {
+        const newWatermark = {
+            id: `watermark-${Date.now()}`,
+            text: 'NEW WATERMARK',
+            image: '',
+            opacity: 70,
+            position: { x: Math.random() * 60 + 20, y: Math.random() * 60 + 20 },
+            size: { width: 200, height: 50 },
+            rotation: 0,
+            fontSize: 24,
+            fontFamily: 'Arial',
+            isBold: false,
+            isItalic: false,
+            textAlign: 'center',
+            textColor: '#FFFFFF'
+        };
+        
+        saveQualityState(); // Save state before adding
+        setWatermarks(prev => [...prev, newWatermark]);
+        setEnableWatermark(true);
+        setSelectedElementForEdit({ type: 'watermark', id: newWatermark.id });
+        setShowWatermarkEditor(true);
+    };
+
+    // Add new signature
+    const addNewSignature = () => {
+        const newSignature = {
+            id: `signature-${Date.now()}`,
+            text: 'New Signature',
+            image: '',
+            opacity: 80,
+            position: { x: Math.random() * 60 + 20, y: Math.random() * 60 + 20 },
+            size: { width: 150, height: 40 },
+            rotation: 0,
+            fontSize: 18,
+            fontFamily: 'cursive',
+            isBold: false,
+            isItalic: true,
+            textAlign: 'center',
+            textColor: '#000000'
+        };
+        
+        saveQualityState(); // Save state before adding
+        setSignatures(prev => [...prev, newSignature]);
+        setEnableSignature(true);
+        setSelectedElementForEdit({ type: 'signature', id: newSignature.id });
+        setShowSignatureEditor(true);
+    };
+
+    // Delete specific watermark
+    const deleteWatermark = (id: string) => {
+        saveQualityState(); // Save state before deleting
+        setWatermarks(prev => prev.filter(w => w.id !== id));
+        if (watermarks.length <= 1) {
+            setEnableWatermark(false);
+        }
+        setActiveElement({ type: null, id: null });
+    };
+
+    // Delete specific signature
+    const deleteSignature = (id: string) => {
+        saveQualityState(); // Save state before deleting
+        setSignatures(prev => prev.filter(s => s.id !== id));
+        if (signatures.length <= 1) {
+            setEnableSignature(false);
+        }
+        setActiveElement({ type: null, id: null });
+    };
+
+    // Update watermark
+    const updateWatermark = (id: string, updates: Partial<typeof watermarks[0]>) => {
+        setWatermarksays(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
+    };
+
+    // Update signature
+    const updateSignature = (id: string, updates: Partial<typeof signatures[0]>) => {
+        setSignatures(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    };
+
     // Exported functions for QualityPanel
     const handleAddWatermark = () => {
-        const text = prompt('Enter watermark text:', watermarkText);
-        if (text !== null) {
-            setWatermarkText(text);
-            setEnableWatermark(true); // Enable watermark if text is provided
-
-            // Show text editor popup
+        if (watermarks.length === 0) {
+            addNewWatermark();
+        } else {
+            const firstWatermark = watermarks[0];
+            setSelectedElementForEdit({ type: 'watermark', id: firstWatermark.id });
             setShowWatermarkEditor(true);
         }
     };
@@ -1378,7 +1617,18 @@ const generateFallbackPreview = () => {
         if (qualityPreviewImage) {
             applyQualityEffectsToPreview();
         }
-    }, [selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation]);
+    }, [selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation, watermarks, signatures]);
+
+    // Auto-save quality state when important changes happen
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            if (qualityPreviewImage) {
+                saveQualityState();
+            }
+        }, 1000); // Save after 1 second of inactivity
+
+        return () => clearTimeout(timeoutId);
+    }, [selectedFilter, adjustmentValues, watermarks, signatures, enableWatermark, enableSignature, enableBorder]);
 
     // Auto-generate preview when quality panel opens
     useEffect(() => {
@@ -1454,7 +1704,7 @@ const generateFallbackPreview = () => {
                 if (crop && crop.width && crop.height) {
                     const enhancedImage = generateEnhancedCroppedImage(crop, index);
                     if (enhancedImage.dataUrl) {
-                        setCroppedImages(prev => ({
+                        setCroppedImages((prev: any) => ({
                             ...prev,
                             [index]: enhancedImage.dataUrl
                         }));
@@ -1599,6 +1849,22 @@ const generateFallbackPreview = () => {
             setEnableSignature(false);
         };
 
+        const handleAddNewWatermark = () => {
+            addNewWatermark();
+        };
+
+        const handleAddNewSignature = () => {
+            addNewSignature();
+        };
+
+        const handleUndoQuality = () => {
+            undoQualityEffect();
+        };
+
+        const handleRedoQuality = () => {
+            redoQualityEffect();
+        };
+
         const handleWatermarkOpacityChange = (e: Event) => {
              const target = e.target as HTMLInputElement;
              const value = parseInt(target.value);
@@ -1619,6 +1885,10 @@ const generateFallbackPreview = () => {
         window.addEventListener('signature-opacity-change', handleSignatureOpacityChange as EventListener);
         window.addEventListener('delete-watermark', handleDeleteWatermark);
         window.addEventListener('delete-signature', handleDeleteSignature);
+        window.addEventListener('add-watermark', handleAddNewWatermark);
+        window.addEventListener('add-signature', handleAddNewSignature);
+        window.addEventListener('undo-preview', handleUndoQuality);
+        window.addEventListener('redo-preview', handleRedoQuality);
 
         return () => {
             window.removeEventListener('import-watermark', handleImportWatermarkEvent);
@@ -1629,6 +1899,10 @@ const generateFallbackPreview = () => {
             window.removeEventListener('signature-opacity-change', handleSignatureOpacityChange as EventListener);
             window.removeEventListener('delete-watermark', handleDeleteWatermark);
             window.removeEventListener('delete-signature', handleDeleteSignature);
+            window.removeEventListener('add-watermark', handleAddNewWatermark);
+            window.removeEventListener('add-signature', handleAddNewSignature);
+            window.removeEventListener('undo-preview', handleUndoQuality);
+            window.removeEventListener('redo-preview', handleRedoQuality);
         };
     }, []);
 
@@ -2353,12 +2627,82 @@ const generateFallbackPreview = () => {
         }
     };
 
+    // Save current quality state to history
+    const saveQualityState = () => {
+        const currentState = {
+            timestamp: Date.now(),
+            selectedFilter,
+            adjustmentValues,
+            watermarks: [...watermarks],
+            signatures: [...signatures],
+            enableWatermark,
+            enableSignature,
+            enableBorder,
+            borderWidth,
+            borderColor,
+            previewImage
+        };
+
+        setQualityHistory(prev => [...prev.slice(0, qualityHistoryIndex + 1), currentState]);
+        setQualityHistoryIndex(qualityHistory.length);
+    };
+
+    // Enhanced undo function for quality effects
+    const undoQualityEffect = () => {
+        if (qualityHistoryIndex > 0) {
+            const newIndex = qualityHistoryIndex - 1;
+            const previousState = qualityHistory[newIndex];
+            
+            setSelectedFilter(previousState.selectedFilter);
+            setAdjustmentValues(previousState.adjustmentValues);
+            setWatermarks([...previousState.watermarks]);
+            setSignatures([...previousState.signatures]);
+            setEnableWatermark(previousState.enableWatermark);
+            setEnableSignature(previousState.enableSignature);
+            setEnableBorder(previousState.enableBorder);
+            setBorderWidth(previousState.borderWidth);
+            setBorderColor(previousState.borderColor);
+            setPreviewImage(previousState.previewImage);
+            setQualityPreviewImage(previousState.previewImage);
+            
+            setQualityHistoryIndex(newIndex);
+            alert('↺ Reverted to previous quality settings!');
+        } else {
+            alert('⚠️ No previous quality settings to revert to.');
+        }
+    };
+
+    // Enhanced redo function for quality effects
+    const redoQualityEffect = () => {
+        if (qualityHistoryIndex < qualityHistory.length - 1) {
+            const newIndex = qualityHistoryIndex + 1;
+            const nextState = qualityHistory[newIndex];
+            
+            setSelectedFilter(nextState.selectedFilter);
+            setAdjustmentValues(nextState.adjustmentValues);
+            setWatermarks([...nextState.watermarks]);
+            setSignatures([...nextState.signatures]);
+            setEnableWatermark(nextState.enableWatermark);
+            setEnableSignature(nextState.enableSignature);
+            setEnableBorder(nextState.enableBorder);
+            setBorderWidth(nextState.borderWidth);
+            setBorderColor(nextState.borderColor);
+            setPreviewImage(nextState.previewImage);
+            setQualityPreviewImage(nextState.previewImage);
+            
+            setQualityHistoryIndex(newIndex);
+            alert('↷ Applied next quality settings!');
+        } else {
+            alert('⚠️ No next quality settings to apply.');
+        }
+    };
+
     const undoPreviewChange = () => {
         if (previewHistoryIndex > 0) {
             const newIndex = previewHistoryIndex - 1;
             setPreviewHistoryIndex(newIndex);
             setPreviewImage(previewHistory[newIndex]);
-            setQualityPreviewImage(previewHistory[newIndex]); // Also update the base image for further edits
+            setQualityPreviewImage(previewHistory[newIndex]);
         }
     };
 
@@ -3321,29 +3665,31 @@ const generateFallbackPreview = () => {
                                 }}
                             />
 
-                            {/* Draggable and Resizable Watermark Overlay */}
-                            {enableWatermark && (watermarkText || watermarkImage) && (
-                                <div
-                                    style={{
-                                        position: 'absolute',
-                                        left: `${watermarkPosition.x}%`,
-                                        top: `${watermarkPosition.y}%`,
-                                        width: `${watermarkSize.width}px`,
-                                        height: `${watermarkSize.height}px`,
-                                        transform: `translate(-50%, -50%) rotate(${watermarkRotation}deg)`,
-                                        background: activeControl === 'watermark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                                        border: activeControl === 'watermark' ? '2px solid #007bff' : '2px dashed rgba(255, 255, 255, 0.5)',
-                                        padding: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: '12px',
-                                        color: 'rgba(255, 255, 255, 0.9)',
-                                        userSelect: 'none',
-                                        zIndex: activeControl === 'watermark' ? 1001 : 999,
-                                        cursor: 'move',
-                                        opacity: watermarkOpacity / 100
-                                    }}
+                            {/* Draggable and Resizable Watermark Overlays */}
+                            {enableWatermark && watermarks.map((watermark, index) => (
+                                (watermark.text || watermark.image) && (
+                                    <div
+                                        key={watermark.id}
+                                        style={{
+                                            position: 'absolute',
+                                            left: `${watermark.position.x}%`,
+                                            top: `${watermark.position.y}%`,
+                                            width: `${watermark.size.width}px`,
+                                            height: `${watermark.size.height}px`,
+                                            transform: `translate(-50%, -50%) rotate(${watermark.rotation}deg)`,
+                                            background: activeElement.type === 'watermark' && activeElement.id === watermark.id ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                                            border: activeElement.type === 'watermark' && activeElement.id === watermark.id ? '2px solid #007bff' : '2px dashed rgba(255, 255, 255, 0.5)',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '12px',
+                                            color: 'rgba(255, 255, 255, 0.9)',
+                                            userSelect: 'none',
+                                            zIndex: activeElement.type === 'watermark' && activeElement.id === watermark.id ? 1001 : 999,
+                                            cursor: 'move',
+                                            opacity: watermark.opacity / 100
+                                        }}
                                     onMouseEnter={() => setActiveControl('watermark')}
                                     onMouseLeave={() => setActiveControl('')}
                                     onMouseDown={(e) => {
