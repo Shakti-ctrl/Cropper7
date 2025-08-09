@@ -25,6 +25,10 @@ args = "display_alpha_file"
 task = "workflow.run"
 args = "React Development Server"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "React Dev Server"
+
 [[workflows.workflow]]
 name = "Educational File Server"
 author = "agent"
@@ -51,12 +55,25 @@ task = "shell.exec"
 args = "npm start"
 waitForPort = 3000
 
+[[workflows.workflow]]
+name = "React Dev Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "BROWSER=none npm start"
+waitForPort = 3000
+
 [workflows.workflow.metadata]
 outputType = "webview"
 
 [[ports]]
 localPort = 3000
 externalPort = 3000
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
 
 [[ports]]
 localPort = 5000

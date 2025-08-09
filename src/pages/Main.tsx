@@ -79,24 +79,25 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
 
     return (
         <div style={{ 
-            display: "flex", 
+            display: "flex",
+            flexDirection: "column",
+            width: "100%",
             height: "auto",
             minHeight: "400px",
-            gap: "30px", 
+            gap: "25px", 
             alignItems: "center",
             justifyContent: "center",
             padding: "20px",
             overflow: "hidden"
         }}>
-            {/* Left Side - Main Content */}
+            {/* Main Content - Single Column */}
             <div style={{
-                flex: 1,
+                width: "100%",
                 display: "flex", 
                 flexDirection: "column", 
-                gap: "20px", 
+                gap: "25px", 
                 alignItems: "center",
-                maxWidth: "600px",
-                height: "100%",
+                maxWidth: "100%",
                 justifyContent: "center"
             }}>
                 <h1 onClick={onSelectSomeFiles}
@@ -110,7 +111,8 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                         textShadow: '0 0 30px rgba(0, 255, 255, 0.5)',
                         cursor: 'pointer',
                         transition: 'all 0.3s ease',
-                        margin: '0'
+                        margin: '0',
+                        textAlign: 'center'
                     }}
                 >📸 Select some files (supports 100+ images)</h1>
 
@@ -122,177 +124,186 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                         color: '#00bfff',
                         textShadow: '0 0 15px rgba(0, 191, 255, 0.5)',
                         cursor: 'pointer',
-                        transition: 'all 0.3s ease'
+                        transition: 'all 0.3s ease',
+                        textAlign: 'center'
                     }}
                 >📁 Or select a folder with images</h2>
 
+                {/* Combined Section - Inspiration and Shortcuts */}
                 <div style={{
-                    background: "linear-gradient(135deg, rgba(0, 20, 40, 0.9), rgba(0, 40, 80, 0.8))",
-                    padding: "20px",
-                    borderRadius: "15px",
-                    border: "2px solid rgba(0, 255, 255, 0.3)",
-                    boxShadow: "0 0 30px rgba(0, 255, 255, 0.2)",
                     width: "100%",
-                    maxWidth: "550px"
+                    display: "flex",
+                    gap: "25px",
+                    alignItems: "stretch",
+                    justifyContent: "center",
+                    flexWrap: "wrap"
                 }}>
-                    <h3 style={{
-                        color: "#00ffff", 
-                        marginBottom: "12px",
-                        fontFamily: "'Orbitron', monospace",
-                        textTransform: "uppercase",
-                        letterSpacing: "1px",
-                        textShadow: "0 0 10px rgba(0, 255, 255, 0.8)",
-                        fontSize: "14px",
-                        margin: "0 0 12px 0"
-                    }}>⌨️ Keyboard Shortcuts</h3>
+                    {/* Inspiration Section - Now Wider */}
                     <div style={{
-                        fontSize: "0.85em", 
-                        color: "#00bfff", 
-                        textAlign: "left",
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: "6px"
-                    }}>
-                        <div>• <strong>Ctrl+O</strong> - Open Files</div>
-                        <div>• <strong>Ctrl+F</strong> - Open Folder</div>
-                        <div>• <strong>Ctrl+A</strong> - Select All</div>
-                        <div>• <strong>Ctrl+E</strong> - Export Images</div>
-                        <div>• <strong>Ctrl+Z</strong> - Export as ZIP</div>
-                        <div>• <strong>Ctrl+P</strong> - Export as PDF</div>
-                        <div>• <strong>Escape</strong> - Clear Selection</div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Right Side - Changing Thoughts */}
-            <div style={{
-                flex: 1,
-                maxWidth: "400px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%"
-            }}>
-                <div style={{
-                    background: `
-                        linear-gradient(135deg, 
-                            rgba(0, 40, 80, 0.9) 0%, 
-                            rgba(0, 60, 120, 0.8) 25%, 
-                            rgba(0, 80, 160, 0.7) 50%, 
-                            rgba(0, 60, 120, 0.8) 75%, 
-                            rgba(0, 40, 80, 0.9) 100%
-                        )
-                    `,
-                    border: '3px solid rgba(0, 255, 255, 0.4)',
-                    borderRadius: '20px',
-                    padding: '30px',
-                    boxShadow: `
-                        0 0 40px rgba(0, 255, 255, 0.3),
-                        inset 0 0 30px rgba(0, 255, 255, 0.1)
-                    `,
-                    position: 'relative',
-                    overflow: 'hidden',
-                    height: '320px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    width: '100%'
-                }}>
-                    {/* Animated background patterns */}
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
+                        flex: "2",
+                        minWidth: "400px",
                         background: `
-                            repeating-conic-gradient(
-                                from 0deg at 50% 50%,
-                                transparent 0deg,
-                                rgba(0, 255, 255, 0.03) 30deg,
-                                transparent 60deg
+                            linear-gradient(135deg, 
+                                rgba(0, 40, 80, 0.9) 0%, 
+                                rgba(0, 60, 120, 0.8) 25%, 
+                                rgba(0, 80, 160, 0.7) 50%, 
+                                rgba(0, 60, 120, 0.8) 75%, 
+                                rgba(0, 40, 80, 0.9) 100%
                             )
                         `,
-                        animation: 'rotate 20s linear infinite'
-                    }} />
-
-                    {/* Corner Accents */}
-                    <div style={{
-                        position: 'absolute',
-                        top: '12px',
-                        left: '12px',
-                        width: '20px',
-                        height: '20px',
-                        border: '2px solid #00ffff',
-                        borderRight: 'none',
-                        borderBottom: 'none',
-                        borderRadius: '3px 0 0 0'
-                    }} />
-                    <div style={{
-                        position: 'absolute',
-                        bottom: '12px',
-                        right: '12px',
-                        width: '20px',
-                        height: '20px',
-                        border: '2px solid #00ffff',
-                        borderLeft: 'none',
-                        borderTop: 'none',
-                        borderRadius: '0 0 3px 0'
-                    }} />
-
-                    {/* Main Content */}
-                    <div style={{ position: 'relative', zIndex: 2, width: '100%' }}>
-                        <h3 style={{
-                            color: '#00ffff',
-                            fontFamily: "'Orbitron', monospace",
-                            fontSize: '16px',
-                            fontWeight: 'bold',
-                            textTransform: 'uppercase',
-                            letterSpacing: '1.5px',
-                            marginBottom: '15px',
-                            textShadow: '0 0 15px rgba(0, 255, 255, 0.8)',
-                            margin: '0 0 15px 0'
-                        }}>
-                            💭 Inspiration
-                        </h3>
-                        <p style={{
-                            color: '#00bfff',
-                            fontSize: '14px',
-                            lineHeight: '1.5',
-                            fontWeight: '500',
-                            textShadow: '0 0 10px rgba(0, 191, 255, 0.5)',
-                            animation: 'fadeInOut 5s ease-in-out infinite',
-                            minHeight: '45px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            margin: '0'
-                        }}>
-                            {wonderfulThoughts[currentThought]}
-                        </p>
-
-                        {/* Progress indicator */}
+                        border: '3px solid rgba(0, 255, 255, 0.4)',
+                        borderRadius: '20px',
+                        padding: '30px',
+                        boxShadow: `
+                            0 0 40px rgba(0, 255, 255, 0.3),
+                            inset 0 0 30px rgba(0, 255, 255, 0.1)
+                        `,
+                        position: 'relative',
+                        overflow: 'hidden',
+                        height: '220px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center'
+                    }}>
+                        {/* Animated background patterns */}
                         <div style={{
-                            marginTop: '15px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            gap: '4px',
-                            flexWrap: 'wrap'
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: `
+                                repeating-conic-gradient(
+                                    from 0deg at 50% 50%,
+                                    transparent 0deg,
+                                    rgba(0, 255, 255, 0.03) 30deg,
+                                    transparent 60deg
+                                )
+                            `,
+                            animation: 'rotate 20s linear infinite'
+                        }} />
+
+                        {/* Corner Accents */}
+                        <div style={{
+                            position: 'absolute',
+                            top: '12px',
+                            left: '12px',
+                            width: '20px',
+                            height: '20px',
+                            border: '2px solid #00ffff',
+                            borderRight: 'none',
+                            borderBottom: 'none',
+                            borderRadius: '3px 0 0 0'
+                        }} />
+                        <div style={{
+                            position: 'absolute',
+                            bottom: '12px',
+                            right: '12px',
+                            width: '20px',
+                            height: '20px',
+                            border: '2px solid #00ffff',
+                            borderLeft: 'none',
+                            borderTop: 'none',
+                            borderRadius: '0 0 3px 0'
+                        }} />
+
+                        {/* Main Content */}
+                        <div style={{ position: 'relative', zIndex: 2, width: '100%' }}>
+                            <h3 style={{
+                                color: '#00ffff',
+                                fontFamily: "'Orbitron', monospace",
+                                fontSize: '18px',
+                                fontWeight: 'bold',
+                                textTransform: 'uppercase',
+                                letterSpacing: '1.5px',
+                                marginBottom: '20px',
+                                textShadow: '0 0 15px rgba(0, 255, 255, 0.8)',
+                                margin: '0 0 20px 0'
+                            }}>
+                                💭 Inspiration
+                            </h3>
+                            <p style={{
+                                color: '#00bfff',
+                                fontSize: '16px',
+                                lineHeight: '1.6',
+                                fontWeight: '500',
+                                textShadow: '0 0 10px rgba(0, 191, 255, 0.5)',
+                                animation: 'fadeInOut 5s ease-in-out infinite',
+                                minHeight: '50px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                margin: '0'
+                            }}>
+                                {wonderfulThoughts[currentThought]}
+                            </p>
+
+                            {/* Progress indicator */}
+                            <div style={{
+                                marginTop: '20px',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                flexWrap: 'wrap'
+                            }}>
+                                {wonderfulThoughts.slice(0, 8).map((_, index) => (
+                                    <div
+                                        key={index}
+                                        style={{
+                                            width: index === (currentThought % 8) ? '12px' : '6px',
+                                            height: '6px',
+                                            background: index === (currentThought % 8) ? '#00ffff' : 'rgba(0, 255, 255, 0.3)',
+                                            borderRadius: '3px',
+                                            transition: 'all 0.3s ease',
+                                            boxShadow: index === (currentThought % 8) ? '0 0 8px rgba(0, 255, 255, 0.8)' : 'none'
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Keyboard Shortcuts Section */}
+                    <div style={{
+                        flex: "1",
+                        minWidth: "300px",
+                        background: "linear-gradient(135deg, rgba(0, 20, 40, 0.9), rgba(0, 40, 80, 0.8))",
+                        padding: "25px",
+                        borderRadius: "20px",
+                        border: "2px solid rgba(0, 255, 255, 0.3)",
+                        boxShadow: "0 0 30px rgba(0, 255, 255, 0.2)",
+                        height: "220px",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center"
+                    }}>
+                        <h3 style={{
+                            color: "#00ffff", 
+                            marginBottom: "15px",
+                            fontFamily: "'Orbitron', monospace",
+                            textTransform: "uppercase",
+                            letterSpacing: "1px",
+                            textShadow: "0 0 10px rgba(0, 255, 255, 0.8)",
+                            fontSize: "16px",
+                            margin: "0 0 15px 0",
+                            textAlign: "center"
+                        }}>⌨️ Keyboard Shortcuts</h3>
+                        <div style={{
+                            fontSize: "0.9em", 
+                            color: "#00bfff", 
+                            textAlign: "left",
+                            display: "grid",
+                            gridTemplateColumns: "1fr",
+                            gap: "8px"
                         }}>
-                            {wonderfulThoughts.slice(0, 8).map((_, index) => (
-                                <div
-                                    key={index}
-                                    style={{
-                                        width: index === (currentThought % 8) ? '10px' : '5px',
-                                        height: '5px',
-                                        background: index === (currentThought % 8) ? '#00ffff' : 'rgba(0, 255, 255, 0.3)',
-                                        borderRadius: '3px',
-                                        transition: 'all 0.3s ease',
-                                        boxShadow: index === (currentThought % 8) ? '0 0 8px rgba(0, 255, 255, 0.8)' : 'none'
-                                    }}
-                                />
-                            ))}
+                            <div>• <strong>Ctrl+O</strong> - Open Files</div>
+                            <div>• <strong>Ctrl+F</strong> - Open Folder</div>
+                            <div>• <strong>Ctrl+A</strong> - Select All</div>
+                            <div>• <strong>Ctrl+E</strong> - Export Images</div>
+                            <div>• <strong>Ctrl+Z</strong> - Export as ZIP</div>
+                            <div>• <strong>Ctrl+P</strong> - Export as PDF</div>
+                            <div>• <strong>Escape</strong> - Clear Selection</div>
                         </div>
                     </div>
                 </div>
