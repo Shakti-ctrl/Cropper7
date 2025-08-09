@@ -1247,7 +1247,7 @@ function Main({ appName, aboutText } :any) {
             textAlign: 'center',
             textColor: '#FFFFFF'
         };
-        
+
         saveQualityState(); // Save state before adding
         setWatermarks(prev => [...prev, newWatermark]);
         setEnableWatermark(true);
@@ -1272,7 +1272,7 @@ function Main({ appName, aboutText } :any) {
             textAlign: 'center',
             textColor: '#000000'
         };
-        
+
         saveQualityState(); // Save state before adding
         setSignatures(prev => [...prev, newSignature]);
         setEnableSignature(true);
@@ -1302,7 +1302,7 @@ function Main({ appName, aboutText } :any) {
 
     // Update watermark
     const updateWatermark = (id: string, updates: Partial<typeof watermarks[0]>) => {
-        setWatermarksays(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
+        setWatermarks(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
     };
 
     // Update signature
@@ -1659,7 +1659,7 @@ const generateFallbackPreview = () => {
         setBorderImage('');
         setWatermarkRotation(0);
         setSignatureRotation(0);
-        
+
         // Save to localStorage
         localStorage.removeItem('qualitySettings');
         localStorage.removeItem('adjustmentValues');
@@ -1690,13 +1690,13 @@ const generateFallbackPreview = () => {
             watermarkRotation,
             signatureRotation
         };
-        
+
         localStorage.setItem('qualitySettings', JSON.stringify(settings));
-        
+
         if (applyToAll) {
             // Store original cropped images for undo functionality
             setOriginalCroppedImages({ ...croppedImages });
-            
+
             // Apply effects to all cropped images
             Object.keys(crops).forEach(key => {
                 const index = parseInt(key);
@@ -1711,7 +1711,7 @@ const generateFallbackPreview = () => {
                     }
                 }
             });
-            
+
             alert('✅ Quality settings applied to all images!');
         } else {
             alert('💾 Quality settings saved!');
@@ -1734,7 +1734,7 @@ const generateFallbackPreview = () => {
                 const savedSettings = localStorage.getItem('qualitySettings');
                 if (savedSettings) {
                     const settings = JSON.parse(savedSettings);
-                    
+
                     if (settings.selectedFilter) setSelectedFilter(settings.selectedFilter);
                     if (settings.adjustmentValues) setAdjustmentValues(settings.adjustmentValues);
                     if (settings.watermarkText) setWatermarkText(settings.watermarkText);
@@ -1755,7 +1755,7 @@ const generateFallbackPreview = () => {
                     if (settings.borderImage) setBorderImage(settings.borderImage);
                     if (settings.watermarkRotation !== undefined) setWatermarkRotation(settings.watermarkRotation);
                     if (settings.signatureRotation !== undefined) setSignatureRotation(settings.signatureRotation);
-                    
+
                     alert('📥 Saved settings loaded successfully!');
                 } else {
                     alert('⚠️ No saved settings found.');
@@ -2652,7 +2652,7 @@ const generateFallbackPreview = () => {
         if (qualityHistoryIndex > 0) {
             const newIndex = qualityHistoryIndex - 1;
             const previousState = qualityHistory[newIndex];
-            
+
             setSelectedFilter(previousState.selectedFilter);
             setAdjustmentValues(previousState.adjustmentValues);
             setWatermarks([...previousState.watermarks]);
@@ -2664,7 +2664,7 @@ const generateFallbackPreview = () => {
             setBorderColor(previousState.borderColor);
             setPreviewImage(previousState.previewImage);
             setQualityPreviewImage(previousState.previewImage);
-            
+
             setQualityHistoryIndex(newIndex);
             alert('↺ Reverted to previous quality settings!');
         } else {
@@ -2677,7 +2677,7 @@ const generateFallbackPreview = () => {
         if (qualityHistoryIndex < qualityHistory.length - 1) {
             const newIndex = qualityHistoryIndex + 1;
             const nextState = qualityHistory[newIndex];
-            
+
             setSelectedFilter(nextState.selectedFilter);
             setAdjustmentValues(nextState.adjustmentValues);
             setWatermarks([...nextState.watermarks]);
@@ -2689,7 +2689,7 @@ const generateFallbackPreview = () => {
             setBorderColor(nextState.borderColor);
             setPreviewImage(nextState.previewImage);
             setQualityPreviewImage(nextState.previewImage);
-            
+
             setQualityHistoryIndex(newIndex);
             alert('↷ Applied next quality settings!');
         } else {
@@ -3820,6 +3820,39 @@ const generateFallbackPreview = () => {
                                     >
                                         ↻
                                     </div>
+
+                                    {/* Delete Button */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-6px',
+                                            right: '-6px',
+                                            width: '12px',
+                                            height: '12px',
+                                            background: '#dc3545',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            cursor: 'pointer',
+                                            zIndex: 1002,
+                                            display: activeControl === 'watermark' ? 'flex' : 'none',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white'
+                                        }}
+                                        title="Delete Watermark"
+                                        onClick={(e) => {
+                                            if (window.confirm('Delete this watermark?')) {
+                                                setWatermarkText('');
+                                                setWatermarkImage('');
+                                                setEnableWatermark(false);
+                                            }
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        ✕
+                                    </div>
                                 </div>
                             )}
 
@@ -3833,8 +3866,8 @@ const generateFallbackPreview = () => {
                                         width: `${signatureSize.width}px`,
                                         height: `${signatureSize.height}px`,
                                         transform: `translate(-50%, -50%) rotate(${signatureRotation}deg)`,
-                                        background: activeControl === 'signature' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
-                                        border: activeControl === 'signature' ? '2px solid #28a745' : '2px dashed rgba(0, 0, 0, 0.5)',
+                                        background: activeElement.type === 'signature' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
+                                        border: activeElement.type === 'signature' ? '2px solid #28a745' : '2px dashed rgba(0, 0, 0, 0.5)',
                                         padding: '4px',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -3842,7 +3875,7 @@ const generateFallbackPreview = () => {
                                         fontSize: '12px',
                                         color: 'rgba(0, 0, 0, 0.9)',
                                         userSelect: 'none',
-                                        zIndex: activeControl === 'signature' ? 1001 : 999,
+                                        zIndex: activeElement.type === 'signature' ? 1001 : 999,
                                         cursor: 'move',
                                         opacity: signatureOpacity / 100
                                     }}
