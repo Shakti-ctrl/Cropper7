@@ -78,13 +78,13 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
     }, [wonderfulThoughts.length]);
 
     return (
-        <div style={{ 
+        <div style={{
             display: "flex",
             flexDirection: "column",
             width: "100%",
             height: "auto",
             minHeight: "400px",
-            gap: "25px", 
+            gap: "25px",
             alignItems: "stretch",
             justifyContent: "center",
             padding: "20px",
@@ -94,9 +94,9 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
             {/* Main Content - Single Column */}
             <div style={{
                 width: "100%",
-                display: "flex", 
-                flexDirection: "column", 
-                gap: "25px", 
+                display: "flex",
+                flexDirection: "column",
+                gap: "25px",
                 alignItems: "stretch",
                 maxWidth: "100%",
                 justifyContent: "center"
@@ -120,7 +120,7 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                 <h2 onClick={onSelectFolder}
                     className="select-some-files"
                     style={{
-                        fontSize: "1.6em", 
+                        fontSize: "1.6em",
                         margin: "0",
                         color: '#00bfff',
                         textShadow: '0 0 15px rgba(0, 191, 255, 0.5)',
@@ -144,11 +144,11 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                         flex: "3",
                         minWidth: "450px",
                         background: `
-                            linear-gradient(135deg, 
-                                rgba(0, 40, 80, 0.9) 0%, 
-                                rgba(0, 60, 120, 0.8) 25%, 
-                                rgba(0, 80, 160, 0.7) 50%, 
-                                rgba(0, 60, 120, 0.8) 75%, 
+                            linear-gradient(135deg,
+                                rgba(0, 40, 80, 0.9) 0%,
+                                rgba(0, 60, 120, 0.8) 25%,
+                                rgba(0, 80, 160, 0.7) 50%,
+                                rgba(0, 60, 120, 0.8) 75%,
                                 rgba(0, 40, 80, 0.9) 100%
                             )
                         `,
@@ -280,7 +280,7 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                         justifyContent: "center"
                     }}>
                         <h3 style={{
-                            color: "#00ffff", 
+                            color: "#00ffff",
                             marginBottom: "15px",
                             fontFamily: "'Orbitron', monospace",
                             textTransform: "uppercase",
@@ -291,8 +291,8 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                             textAlign: "center"
                         }}>⌨️ Keyboard Shortcuts</h3>
                         <div style={{
-                            fontSize: "0.9em", 
-                            color: "#00bfff", 
+                            fontSize: "0.9em",
+                            color: "#00bfff",
                             textAlign: "left",
                             display: "grid",
                             gridTemplateColumns: "1fr",
@@ -592,6 +592,11 @@ function Main({ appName, aboutText } :any) {
     // Border states
     const [borderWidth, setBorderWidth] = useState<number>(10);
     const [borderColor, setBorderColor] = useState<string>('#000000');
+    const [borderStyle, setBorderStyle] = useState<string>('solid');
+    const [borderRadius, setBorderRadius] = useState<number>(0);
+    const [borderGradient, setBorderGradient] = useState<string>('');
+    const [borderShadow, setBorderShadow] = useState<boolean>(false);
+    const [showAdvancedBorderEditor, setShowAdvancedBorderEditor] = useState<boolean>(false);
 
     // Text styling states for watermark
     const [watermarkFontSize, setWatermarkFontSize] = useState<number>(24);
@@ -634,6 +639,8 @@ function Main({ appName, aboutText } :any) {
     const [previewPosition, setPreviewPosition] = useState({ x: 50, y: 50 });
     const [isResizing, setIsResizing] = useState<boolean>(false);
     const [currentPreviewIndex, setCurrentPreviewIndex] = useState<number>(0);
+    const [previewHistory, setPreviewHistory] = useState<string[]>([]);
+    const [previewHistoryIndex, setPreviewHistoryIndex] = useState<number>(0);
 
     const inputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
@@ -965,7 +972,7 @@ function Main({ appName, aboutText } :any) {
             const scaledFontSize = Math.max(canvas.width / 800 * watermarkFontSize, 12);
             const fontWeight = watermarkIsBold ? 'bold' : 'normal';
             const fontStyle = watermarkIsItalic ? 'italic' : 'normal';
-            
+
             ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${watermarkFontFamily}`;
             ctx.fillStyle = watermarkTextColor;
             ctx.strokeStyle = watermarkTextColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
@@ -1041,7 +1048,7 @@ function Main({ appName, aboutText } :any) {
             const scaledFontSize = Math.max(canvas.width / 800 * signatureFontSize, 10);
             const fontWeight = signatureIsBold ? 'bold' : 'normal';
             const fontStyle = signatureIsItalic ? 'italic' : 'normal';
-            
+
             ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${signatureFontFamily}`;
             ctx.fillStyle = signatureTextColor;
             ctx.strokeStyle = signatureTextColor === '#000000' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
@@ -1069,7 +1076,7 @@ function Main({ appName, aboutText } :any) {
         if (text !== null) {
             setWatermarkText(text);
             setEnableWatermark(true); // Enable watermark if text is provided
-            
+
             // Show text editor popup
             setShowWatermarkEditor(true);
         }
@@ -1093,7 +1100,7 @@ function Main({ appName, aboutText } :any) {
         if (text !== null) {
             setSignatureText(text);
             setEnableSignature(true); // Enable signature if text is provided
-            
+
             // Show text editor popup
             setShowSignatureEditor(true);
         }
@@ -1233,7 +1240,7 @@ function Main({ appName, aboutText } :any) {
 
     const generateQualityPreview = () => {
     // Use the first cropped image if available, otherwise load original or sample
-    const firstCropKey = Object.keys(crops).find(key => crops[key] && crops[key].width && crops[key].height);
+    const firstCropKey = Object.keys(crops).find(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height);
 
     if (firstCropKey) {
         // Generate cropped image for preview with effects applied
@@ -1241,8 +1248,11 @@ function Main({ appName, aboutText } :any) {
         try {
             const enhancedImage = generateEnhancedCroppedImage(crop, parseInt(firstCropKey));
             if (enhancedImage && enhancedImage.dataUrl) {
+                setPreviewImage(enhancedImage.dataUrl);
                 setQualityPreviewImage(enhancedImage.dataUrl);
                 setCurrentPreviewIndex(parseInt(firstCropKey));
+                setPreviewHistory([enhancedImage.dataUrl]);
+                setPreviewHistoryIndex(0);
             } else {
                 console.warn('Failed to generate cropped image for preview');
                 generateFallbackPreview();
@@ -1256,7 +1266,10 @@ function Main({ appName, aboutText } :any) {
         const file = files[0];
         const imgURL = URL.createObjectURL(file);
         setQualityPreviewImage(imgURL);
+        setPreviewImage(imgURL);
         setCurrentPreviewIndex(0);
+        setPreviewHistory([imgURL]);
+        setPreviewHistoryIndex(0);
     } else {
         generateFallbackPreview();
     }
@@ -1283,8 +1296,12 @@ const generateFallbackPreview = () => {
         ctx.fillText('Sample Image', canvas.width / 2, canvas.height / 2 - 20);
         ctx.fillText('Quality Tools Preview', canvas.width / 2, canvas.height / 2 + 20);
 
-        setQualityPreviewImage(canvas.toDataURL());
+        const dataUrl = canvas.toDataURL();
+        setPreviewImage(dataUrl);
+        setQualityPreviewImage(dataUrl);
         setCurrentPreviewIndex(0); // Reset index for fallback
+        setPreviewHistory([dataUrl]);
+        setPreviewHistoryIndex(0);
     }
 };
 
@@ -1343,7 +1360,12 @@ const generateFallbackPreview = () => {
             // Add signature
             addSignature(canvas, ctx);
 
-            setPreviewImage(canvas.toDataURL());
+            const newPreviewImage = canvas.toDataURL();
+            setPreviewImage(newPreviewImage);
+
+            // Update history for undo
+            setPreviewHistory(prev => [...prev.slice(0, previewHistoryIndex + 1), newPreviewImage]);
+            setPreviewHistoryIndex(previewHistory.length);
         };
         img.onerror = () => {
             console.error("Failed to load quality preview image");
@@ -1356,7 +1378,7 @@ const generateFallbackPreview = () => {
         if (qualityPreviewImage) {
             applyQualityEffectsToPreview();
         }
-    }, [selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation, qualityPreviewImage]);
+    }, [selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation]);
 
     // Auto-generate preview when quality panel opens
     useEffect(() => {
@@ -1364,318 +1386,6 @@ const generateFallbackPreview = () => {
             generateQualityPreview();
         }
     }, [showQualityPanel]);
-
-    // Add preview effects event listener
-    useEffect(() => {
-        const handlePreviewEffects = () => {
-            handleShowPreview();
-        };
-
-        window.addEventListener('preview-effects', handlePreviewEffects);
-        return () => window.removeEventListener('preview-effects', handlePreviewEffects);
-    }, []);
-
-    // Live update preview when effects change
-    useEffect(() => {
-        if (showQualityPanel && qualityPreviewImage) {
-            const timeoutId = setTimeout(() => {
-                applyQualityEffectsToPreview();
-            }, 100);
-            return () => clearTimeout(timeoutId);
-        }
-    }, [selectedFilter, adjustmentValues, enableWatermark, enableBorder, enableSignature, watermarkText, borderWidth, borderColor, signatureText]);
-
-    const handleSaveAdjustments = (fromPreviewPopup: boolean = false) => {
-        // Save original cropped images for undo functionality
-        setOriginalCroppedImages({ ...croppedImages });
-
-        const adjustmentData = {
-            selectedFilter,
-            adjustmentValues,
-            watermarkText,
-            borderWidth,
-            borderColor,
-            signatureText,
-            enableWatermark,
-            enableBorder,
-            enableSignature,
-            watermarkOpacity,
-            signatureOpacity,
-            watermarkPosition,
-            signaturePosition,
-            watermarkSize,
-            signatureSize,
-            watermarkImage,
-            signatureImage,
-            watermarkRotation,
-            signatureRotation,
-            timestamp: Date.now()
-        };
-
-        localStorage.setItem('qualityToolsSettings', JSON.stringify(adjustmentData));
-
-        // Apply effects to all cropped images immediately
-        Object.keys(crops).forEach((key) => {
-            const cropIndex = parseInt(key);
-            const crop = crops[cropIndex];
-            if (crop) {
-                const enhancedImage = generateEnhancedCroppedImage(crop, cropIndex);
-                setCroppedImages((prev: any) => ({
-                    ...prev,
-                    [key]: enhancedImage.dataUrl
-                }));
-            }
-        });
-
-        if (!fromPreviewPopup) {
-            alert('Quality effects applied to all cropped images! Use Undo to revert changes.');
-        }
-    };
-
-    const handleUndoAdjustments = () => {
-        if (Object.keys(originalCroppedImages).length > 0) {
-            setCroppedImages(originalCroppedImages);
-            setOriginalCroppedImages({});
-            resetAllQualitySettings();
-            alert('Changes reverted to original cropped images!');
-        } else {
-            alert('No previous version to undo to!');
-        }
-    };
-
-    // Reset all quality tools to default values
-    const resetAllQualitySettings = () => {
-        setSelectedFilter(null);
-        setAdjustmentValues(null);
-        setWatermarkText('WATERMARK');
-        setBorderWidth(10);
-        setBorderColor('#000000');
-        setSignatureText('');
-        setEnableWatermark(false);
-        setEnableBorder(false);
-        setEnableSignature(false);
-        setWatermarkOpacity(70);
-        setSignatureOpacity(80);
-        setWatermarkPosition({ x: 80, y: 90 });
-        setSignaturePosition({ x: 5, y: 95 });
-        setWatermarkSize({ width: 200, height: 50 });
-        setSignatureSize({ width: 150, height: 40 });
-        setWatermarkImage('');
-        setSignatureImage('');
-        setBorderImage('');
-        setWatermarkRotation(0);
-        setSignatureRotation(0);
-
-        // Clear from localStorage
-        localStorage.removeItem('qualityToolsSettings');
-
-        // Regenerate preview if quality panel is open
-        if (showQualityPanel) {
-            generateQualityPreview();
-        }
-    };
-
-    const loadSavedAdjustments = (fromPreviewPopup: boolean = false) => {
-        const saved = localStorage.getItem('qualityToolsSettings');
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                setSelectedFilter(data.selectedFilter);
-                setAdjustmentValues(data.adjustmentValues);
-                setWatermarkText(data.watermarkText || 'WATERMARK');
-                setBorderWidth(data.borderWidth || 10);
-                setBorderColor(data.borderColor || '#000000');
-                setSignatureText(data.signatureText || '');
-                setEnableWatermark(data.enableWatermark || false);
-                setEnableBorder(data.enableBorder || false);
-                setEnableSignature(data.enableSignature || false);
-                setWatermarkOpacity(data.watermarkOpacity || 70);
-                setSignatureOpacity(data.signatureOpacity || 80);
-                setWatermarkPosition(data.watermarkPosition || { x: 80, y: 90 });
-                setSignaturePosition(data.signaturePosition || { x: 5, y: 95 });
-                setWatermarkSize(data.watermarkSize || { width: 200, height: 50 });
-                setSignatureSize(data.signatureSize || { width: 150, height: 40 });
-                setWatermarkImage(data.watermarkImage || '');
-                setSignatureImage(data.signatureImage || '');
-                setWatermarkRotation(data.watermarkRotation || 0);
-                setSignatureRotation(data.signatureRotation || 0);
-                if (!fromPreviewPopup) {
-                    alert('Quality tool settings loaded!');
-                }
-            } catch (error) {
-                console.error('Error loading saved settings:', error);
-            }
-        }
-    };
-
-    // Session persistence - save every 30 seconds including file data
-    useEffect(() => {
-        const saveSession = () => {
-            if (files.length > 0) {
-                const sessionData = {
-                    filesData: files.map((file, index) => ({
-                        name: file.name,
-                        size: file.size,
-                        type: file.type,
-                        lastModified: file.lastModified,
-                        // Note: Storing dataUrl can bloat localStorage, but is necessary for immediate restoration without re-upload.
-                        // Consider optimizing this if it becomes an issue.
-                        dataUrl: file instanceof File ? URL.createObjectURL(file) : file.dataUrl, // Use existing dataUrl or create one
-                        index: index
-                    })),
-                    crops,
-                    croppedImages: Object.keys(croppedImages).reduce((acc, key) => {
-                        acc[key] = croppedImages[key]; // Store base64 data
-                        return acc;
-                    }, {} as any),
-                    selectedFiles: Array.from(selectedFiles),
-                    currentTab: tabs.find(t => t.isActive)?.id,
-                    tabs,
-                    history: history.slice(-10), // Keep last 10 history items
-                    // Save quality settings
-                    selectedFilter,
-                    adjustmentValues,
-                    watermarkText,
-                    signatureText,
-                    borderWidth,
-                    borderColor,
-                    enableWatermark,
-                    enableSignature,
-                    enableBorder,
-                    watermarkOpacity,
-                    signatureOpacity,
-                    watermarkPosition,
-                    signaturePosition,
-                    watermarkSize,
-                    signatureSize,
-                    watermarkImage,
-                    signatureImage,
-                    watermarkRotation,
-                    signatureRotation,
-                    // Text styling states
-                    watermarkFontSize,
-                    watermarkFontFamily,
-                    watermarkIsBold,
-                    watermarkIsItalic,
-                    watermarkTextAlign,
-                    watermarkTextColor,
-                    signatureFontSize,
-                    signatureFontFamily,
-                    signatureIsBold,
-                    signatureIsItalic,
-                    signatureTextAlign,
-                    signatureTextColor,
-                    timestamp: Date.now()
-                };
-                localStorage.setItem('imageCropperSession', JSON.stringify(sessionData));
-            }
-        };
-
-        const interval = setInterval(saveSession, 30000); // Save every 30 seconds
-
-        // Save on page unload
-        const handleBeforeUnload = () => {
-            saveSession();
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [files, crops, croppedImages, selectedFiles, tabs, history, selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation, watermarkFontSize, watermarkFontFamily, watermarkIsBold, watermarkIsItalic, watermarkTextAlign, watermarkTextColor, signatureFontSize, signatureFontFamily, signatureIsBold, signatureIsItalic, signatureTextAlign, signatureTextColor]);
-
-    // Enhanced session restoration
-    useEffect(() => {
-        const restoreSession = async () => {
-            const savedSession = localStorage.getItem('imageCropperSession');
-            if (savedSession) {
-                try {
-                    const sessionData = JSON.parse(savedSession);
-                    const timeDiff = Date.now() - (sessionData.timestamp || 0);
-                    const hoursDiff = timeDiff / (1000 * 60 * 60);
-
-                    if (hoursDiff < 24) { // Only restore sessions less than 24 hours old
-                        const shouldRestore = window.confirm(
-                            `Found a session from ${new Date(sessionData.timestamp).toLocaleString()} with ${sessionData.filesData?.length || 0} files and ${Object.keys(sessionData.crops || {}).length} crops. ` +
-                            'Would you like to restore your previous session with all settings and processed images?'
-                        );
-
-                        if (shouldRestore) {
-                            // Restore core states
-                            setCrops(sessionData.crops || {});
-                            setCroppedImages(sessionData.croppedImages || {});
-                            setSelectedFiles(new Set(sessionData.selectedFiles || []));
-                            setTabs(sessionData.tabs || []);
-                            setHistory(sessionData.history || []);
-                            setActiveTabId(sessionData.currentTab || tabs[0]?.id || 'tab-1');
-                            setGridView(sessionData.gridView !== undefined ? sessionData.gridView : true);
-
-
-                            // Restore quality settings
-                            if (sessionData.selectedFilter) setSelectedFilter(sessionData.selectedFilter);
-                            if (sessionData.adjustmentValues) setAdjustmentValues(sessionData.adjustmentValues);
-                            if (sessionData.watermarkText) setWatermarkText(sessionData.watermarkText);
-                            if (sessionData.signatureText) setSignatureText(sessionData.signatureText);
-                            if (sessionData.borderWidth) setBorderWidth(sessionData.borderWidth);
-                            if (sessionData.borderColor) setBorderColor(sessionData.borderColor);
-                            if (sessionData.enableWatermark) setEnableWatermark(sessionData.enableWatermark);
-                            if (sessionData.enableSignature) setEnableSignature(sessionData.enableSignature);
-                            if (sessionData.enableBorder) setEnableBorder(sessionData.enableBorder);
-                            if (sessionData.watermarkOpacity) setWatermarkOpacity(sessionData.watermarkOpacity);
-                            if (sessionData.signatureOpacity) setSignatureOpacity(sessionData.signatureOpacity);
-                            if (sessionData.watermarkPosition) setWatermarkPosition(sessionData.watermarkPosition);
-                            if (sessionData.signaturePosition) setSignaturePosition(sessionData.signaturePosition);
-                            if (sessionData.watermarkSize) setWatermarkSize(sessionData.watermarkSize);
-                            if (sessionData.signatureSize) setSignatureSize(sessionData.signatureSize);
-                            if (sessionData.watermarkImage) setWatermarkImage(sessionData.watermarkImage);
-                            if (sessionData.signatureImage) setSignatureImage(sessionData.signatureImage);
-                            if (sessionData.watermarkRotation) setWatermarkRotation(sessionData.watermarkRotation);
-                            if (sessionData.signatureRotation) setSignatureRotation(sessionData.signatureRotation);
-                            
-                            // Restore text styling states
-                            if (sessionData.watermarkFontSize) setWatermarkFontSize(sessionData.watermarkFontSize);
-                            if (sessionData.watermarkFontFamily) setWatermarkFontFamily(sessionData.watermarkFontFamily);
-                            if (sessionData.watermarkIsBold !== undefined) setWatermarkIsBold(sessionData.watermarkIsBold);
-                            if (sessionData.watermarkIsItalic !== undefined) setWatermarkIsItalic(sessionData.watermarkIsItalic);
-                            if (sessionData.watermarkTextAlign) setWatermarkTextAlign(sessionData.watermarkTextAlign);
-                            if (sessionData.watermarkTextColor) setWatermarkTextColor(sessionData.watermarkTextColor);
-                            if (sessionData.signatureFontSize) setSignatureFontSize(sessionData.signatureFontSize);
-                            if (sessionData.signatureFontFamily) setSignatureFontFamily(sessionData.signatureFontFamily);
-                            if (sessionData.signatureIsBold !== undefined) setSignatureIsBold(sessionData.signatureIsBold);
-                            if (sessionData.signatureIsItalic !== undefined) setSignatureIsItalic(sessionData.signatureIsItalic);
-                            if (sessionData.signatureTextAlign) setSignatureTextAlign(sessionData.signatureTextAlign);
-                            if (sessionData.signatureTextColor) setSignatureTextColor(sessionData.signatureTextColor);
-
-                            // Re-create File objects for the filesData
-                            const restoredFiles = sessionData.filesData.map((fileData: any) => {
-                                // Create a File object from dataUrl (this is a workaround as original File objects are not preserved)
-                                // This might not be perfect and might require re-upload for full functionality.
-                                // For simplicity here, we'll just use the dataUrl directly if available, or create a placeholder.
-                                if (fileData.dataUrl) {
-                                    return { ...fileData, isRestored: true }; // Mark as restored
-                                }
-                                return { ...fileData, isRestored: true }; // Placeholder if dataUrl is missing
-                            });
-                            setFiles(restoredFiles);
-
-
-                            alert(`Session restored! All your settings, crops, and processed images are back. You might need to re-upload images if they weren't fully preserved.`);
-                        }
-                    } else {
-                        // Clean up old sessions (older than 24 hours)
-                        localStorage.removeItem('imageCropperSession');
-                    }
-                } catch (error) {
-                    console.error('Error restoring session:', error);
-                    localStorage.removeItem('imageCropperSession');
-                }
-            }
-        };
-
-        restoreSession();
-    }, []); // Run only once on mount
 
     // Add event listeners for new Quality Panel functionality
     useEffect(() => {
@@ -2459,6 +2169,9 @@ const generateFallbackPreview = () => {
                 if (enhancedImage && enhancedImage.dataUrl) {
                     setPreviewImage(enhancedImage.dataUrl);
                     setQualityPreviewImage(enhancedImage.dataUrl);
+                    // Update history for undo
+                    setPreviewHistory(prev => [...prev.slice(0, previewHistoryIndex + 1), enhancedImage.dataUrl]);
+                    setPreviewHistoryIndex(previewHistory.length);
                 }
             } catch (error) {
                 console.error('Error generating next preview image:', error);
@@ -2484,10 +2197,22 @@ const generateFallbackPreview = () => {
                 if (enhancedImage && enhancedImage.dataUrl) {
                     setPreviewImage(enhancedImage.dataUrl);
                     setQualityPreviewImage(enhancedImage.dataUrl);
+                    // Update history for undo
+                    setPreviewHistory(prev => [...prev.slice(0, previewHistoryIndex + 1), enhancedImage.dataUrl]);
+                    setPreviewHistoryIndex(previewHistory.length);
                 }
             } catch (error) {
                 console.error('Error generating previous preview image:', error);
             }
+        }
+    };
+
+    const undoPreviewChange = () => {
+        if (previewHistoryIndex > 0) {
+            const newIndex = previewHistoryIndex - 1;
+            setPreviewHistoryIndex(newIndex);
+            setPreviewImage(previewHistory[newIndex]);
+            setQualityPreviewImage(previewHistory[newIndex]); // Also update the base image for further edits
         }
     };
 
@@ -2550,18 +2275,31 @@ const generateFallbackPreview = () => {
         });
     };
 
+    // Save current state of preview image for undo
+    const savePreviewState = () => {
+        if (previewImage) {
+            setPreviewHistory(prev => [...prev.slice(0, previewHistoryIndex + 1), previewImage]);
+            setPreviewHistoryIndex(previewHistory.length);
+        }
+    };
+
+    const savePreviewStateAndApply = () => {
+        savePreviewState();
+        applyQualityEffectsToPreview();
+    };
+
     return (
         <div style={{
-            overflow: "auto", 
-            width: "100%", 
+            overflow: "auto",
+            width: "100%",
             height: "100vh",
             padding: "0",
             background: `
                 linear-gradient(135deg, #000814 0%, #001d3d 25%, #003566 50%, #001d3d 75%, #000814 100%),
-                repeating-linear-gradient(45deg, 
-                    rgba(0, 255, 255, 0.03) 0px, 
-                    rgba(0, 255, 255, 0.03) 2px, 
-                    transparent 2px, 
+                repeating-linear-gradient(45deg,
+                    rgba(0, 255, 255, 0.03) 0px,
+                    rgba(0, 255, 255, 0.03) 2px,
+                    transparent 2px,
                     transparent 20px
                 )
             `,
@@ -2585,15 +2323,15 @@ const generateFallbackPreview = () => {
                             alignItems: "center",
                             gap: "8px",
                             padding: "8px 16px",
-                            background: tab.id === activeTabId 
-                                ? "linear-gradient(135deg, #00ffff, #0080ff)" 
+                            background: tab.id === activeTabId
+                                ? "linear-gradient(135deg, #00ffff, #0080ff)"
                                 : "linear-gradient(135deg, rgba(0, 40, 80, 0.8), rgba(0, 20, 40, 0.9))",
                             color: tab.id === activeTabId ? "#000" : "#00bfff",
                             borderRadius: "8px",
                             whiteSpace: "nowrap",
                             border: `1px solid ${tab.id === activeTabId ? "#00ffff" : "rgba(0, 255, 255, 0.3)"}`,
-                            boxShadow: tab.id === activeTabId 
-                                ? "0 0 20px rgba(0, 255, 255, 0.6)" 
+                            boxShadow: tab.id === activeTabId
+                                ? "0 0 20px rgba(0, 255, 255, 0.6)"
                                 : "0 0 10px rgba(0, 255, 255, 0.2)",
                             transition: "all 0.3s ease",
                             fontWeight: "600",
@@ -2846,10 +2584,10 @@ const generateFallbackPreview = () => {
                             boxShadow: "0 0 20px rgba(0, 255, 255, 0.2)"
                         }}>
                             {/* First Row - Crop Controls */}
-                            <div style={{ 
-                                display: "flex", 
-                                alignItems: "center", 
-                                gap: "10px", 
+                            <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
                                 marginBottom: "10px",
                                 flexWrap: "wrap",
                                 justifyContent: "flex-start"
@@ -2885,9 +2623,9 @@ const generateFallbackPreview = () => {
                             </div>
 
                             {/* Second Row - View & Export Controls */}
-                            <div style={{ 
-                                display: "flex", 
-                                alignItems: "center", 
+                            <div style={{
+                                display: "flex",
+                                alignItems: "center",
                                 gap: "10px",
                                 flexWrap: "wrap",
                                 justifyContent: "flex-start"
@@ -3395,18 +3133,36 @@ const generateFallbackPreview = () => {
                             }}
                         >
                             <span>🖼️ Live Preview ({currentPreviewIndex + 1}/{Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height).length})</span>
-                            <button
-                                onClick={() => setShowFloatingPreview(false)}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    fontSize: '14px'
-                                }}
-                            >
-                                ✕
-                            </button>
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                                <button
+                                    onClick={undoPreviewChange}
+                                    disabled={previewHistoryIndex <= 0}
+                                    style={{
+                                        background: previewHistoryIndex > 0 ? '#28a745' : '#6c757d',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '4px 8px',
+                                        borderRadius: '3px',
+                                        cursor: previewHistoryIndex > 0 ? 'pointer' : 'not-allowed',
+                                        fontSize: '12px'
+                                    }}
+                                    title="Undo last change"
+                                >
+                                    ↶
+                                </button>
+                                <button
+                                    onClick={() => setShowFloatingPreview(false)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        fontSize: '14px'
+                                    }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
                         </div>
                         <div style={{ padding: '10px', height: 'calc(100% - 40px)', overflow: 'hidden', position: 'relative' }}>
                             <img
@@ -3472,9 +3228,9 @@ const generateFallbackPreview = () => {
                                     }}
                                 >
                                     {watermarkImage ? (
-                                        <img src={watermarkImage} alt="Watermark" style={{ 
-                                            width: '100%', 
-                                            height: '100%', 
+                                        <img src={watermarkImage} alt="Watermark" style={{
+                                            width: '100%',
+                                            height: '100%',
                                             objectFit: 'contain',
                                             pointerEvents: 'none'
                                         }} />
@@ -3628,9 +3384,9 @@ const generateFallbackPreview = () => {
                                     }}
                                 >
                                     {signatureImage ? (
-                                        <img src={signatureImage} alt="Signature" style={{ 
-                                            width: '100%', 
-                                            height: '100%', 
+                                        <img src={signatureImage} alt="Signature" style={{
+                                            width: '100%',
+                                            height: '100%',
                                             objectFit: 'contain',
                                             pointerEvents: 'none'
                                         }} />
@@ -3998,7 +3754,7 @@ const generateFallbackPreview = () => {
                             darkMode={darkMode}
                             onToggleDarkMode={() => setDarkMode(!darkMode)}
                             onAddWatermark={handleAddWatermark}
-                            onAddBorder={handleAddBorder}
+                            onAddBorder={() => setShowAdvancedBorderEditor(true)} // Button to open advanced editor
                             onAddSignature={handleAddSignature}
                             onShowPreview={handleShowPreview}
                             onSaveAdjustments={handleSaveAdjustments}
@@ -4199,7 +3955,7 @@ const generateFallbackPreview = () => {
                             boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
                         }}>
                             <h3 style={{ marginTop: 0, color: '#333', textAlign: 'center' }}>🎨 Watermark Text Editor</h3>
-                            
+
                             <div style={{ marginBottom: '20px' }}>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Text:</label>
                                 <input
@@ -4376,7 +4132,7 @@ const generateFallbackPreview = () => {
                             boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
                         }}>
                             <h3 style={{ marginTop: 0, color: '#333', textAlign: 'center' }}>✍️ Signature Text Editor</h3>
-                            
+
                             <div style={{ marginBottom: '20px' }}>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Text:</label>
                                 <input
@@ -4513,6 +4269,181 @@ const generateFallbackPreview = () => {
                                 </button>
                                 <button
                                     onClick={() => setShowSignatureEditor(false)}
+                                    style={{
+                                        background: '#f44336',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '12px 24px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '16px'
+                                    }}
+                                >
+                                    ✕ Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Advanced Border Editor */}
+                {showAdvancedBorderEditor && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        background: 'rgba(0, 0, 0, 0.8)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10001
+                    }}>
+                        <div style={{
+                            background: 'white',
+                            padding: '30px',
+                            borderRadius: '15px',
+                            width: '600px',
+                            maxHeight: '80vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+                        }}>
+                            <h3 style={{ marginTop: 0, color: '#333', textAlign: 'center' }}>🖼️ Advanced Border Editor</h3>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Width:</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="50"
+                                        value={borderWidth}
+                                        onChange={(e) => setBorderWidth(parseInt(e.target.value))}
+                                        style={{ width: '100%' }}
+                                    />
+                                    <span style={{ fontSize: '12px', color: '#666' }}>{borderWidth}px</span>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Style:</label>
+                                    <select
+                                        value={borderStyle}
+                                        onChange={(e) => setBorderStyle(e.target.value as any)}
+                                        style={{ width: '100%', padding: '8px', border: '2px solid #ddd', borderRadius: '5px' }}
+                                    >
+                                        <option value="solid">Solid</option>
+                                        <option value="dashed">Dashed</option>
+                                        <option value="dotted">Dotted</option>
+                                        <option value="double">Double</option>
+                                        <option value="groove">Groove (3D)</option>
+                                        <option value="ridge">Ridge (3D)</option>
+                                        <option value="inset">Inset (3D)</option>
+                                        <option value="outset">Outset (3D)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Color:</label>
+                                    <input
+                                        type="color"
+                                        value={borderColor}
+                                        onChange={(e) => setBorderColor(e.target.value)}
+                                        style={{ width: '100%', height: '40px', border: 'none', borderRadius: '5px' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Corner Radius:</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="50"
+                                        value={borderRadius}
+                                        onChange={(e) => setBorderRadius(parseInt(e.target.value))}
+                                        style={{ width: '100%' }}
+                                    />
+                                    <span style={{ fontSize: '12px', color: '#666' }}>{borderRadius}px</span>
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Gradient Colors (comma-separated):</label>
+                                <input
+                                    type="text"
+                                    value={borderGradient}
+                                    onChange={(e) => setBorderGradient(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', border: '2px solid #ddd', borderRadius: '5px' }}
+                                    placeholder="e.g., #ff0000, #00ff00, #0000ff"
+                                />
+                            </div>
+
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={borderShadow}
+                                        onChange={(e) => setBorderShadow(e.target.checked)}
+                                    />
+                                    <span>Add Shadow Effect</span>
+                                </label>
+                            </div>
+
+                            {/* Live Preview */}
+                            <div style={{
+                                border: '2px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '20px',
+                                marginBottom: '20px',
+                                background: '#f8f9fa',
+                                textAlign: 'center'
+                            }}>
+                                <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>Live Preview:</h4>
+                                <div style={{
+                                    width: '200px',
+                                    height: '150px',
+                                    margin: '0 auto',
+                                    background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                                    borderWidth: borderWidth + 'px',
+                                    borderStyle: borderStyle,
+                                    borderColor: borderGradient ? 'transparent' : borderColor,
+                                    borderRadius: borderRadius + 'px',
+                                    borderImage: borderGradient ? `linear-gradient(45deg, ${borderGradient}) 1` : 'none',
+                                    boxShadow: borderShadow ? `${borderWidth/2}px ${borderWidth/2}px ${borderWidth}px rgba(0,0,0,0.5)` : 'none',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontWeight: 'bold'
+                                }}>
+                                    Sample Image
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                                <button
+                                    onClick={() => {
+                                        setEnableBorder(true);
+                                        setShowAdvancedBorderEditor(false);
+                                        savePreviewState(); // Save state before applying
+                                    }}
+                                    style={{
+                                        background: '#4CAF50',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '12px 24px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '16px',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    ✓ Apply Border
+                                </button>
+                                <button
+                                    onClick={() => setShowAdvancedBorderEditor(false)}
                                     style={{
                                         background: '#f44336',
                                         color: 'white',

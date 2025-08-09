@@ -377,7 +377,31 @@ const QualityPanel: React.FC<Props> = ({
             </div>
 
             <div className="control-section">
-              <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>⚙️ Opacity Controls</h4>
+              <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>➕ Multiple Elements</h4>
+              <button 
+                className="quality-btn" 
+                onClick={() => {
+                  const event = new CustomEvent('add-watermark');
+                  window.dispatchEvent(event);
+                }} 
+                style={{ width: '100%', marginBottom: '8px', color: '#000000' }}
+              >
+                ➕ Add New Watermark
+              </button>
+              <button 
+                className="quality-btn" 
+                onClick={() => {
+                  const event = new CustomEvent('add-signature');
+                  window.dispatchEvent(event);
+                }} 
+                style={{ width: '100%', marginBottom: '8px', color: '#000000' }}
+              >
+                ➕ Add New Signature
+              </button>
+            </div>
+
+            <div className="control-section">
+              <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>⚙️ Opacity Controls (Fixed)</h4>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ color: '#666', fontSize: '12px', display: 'block', marginBottom: '4px' }}>
                   💧 Watermark Opacity
@@ -386,15 +410,12 @@ const QualityPanel: React.FC<Props> = ({
                   type="range" 
                   min="0" 
                   max="100" 
-                  value={(window as any).watermarkOpacity || 70}
-                  onChange={(e) => {
-                    const event = new CustomEvent('watermark-opacity-change', { detail: { value: e.target.value } });
-                    window.dispatchEvent(event);
-                  }}
+                  value={watermarkOpacity}
+                  onChange={(e) => onWatermarkOpacityChange(parseInt(e.target.value))}
                   style={{ width: '100%' }}
                 />
                 <span style={{ fontSize: '10px', color: '#999' }}>
-                  {(window as any).watermarkOpacity || 70}%
+                  {watermarkOpacity}%
                 </span>
               </div>
               <div style={{ marginBottom: '10px' }}>
@@ -405,16 +426,39 @@ const QualityPanel: React.FC<Props> = ({
                   type="range" 
                   min="0" 
                   max="100" 
-                  value={(window as any).signatureOpacity || 80}
-                  onChange={(e) => {
-                    const event = new CustomEvent('signature-opacity-change', { detail: { value: e.target.value } });
-                    window.dispatchEvent(event);
-                  }}
+                  value={signatureOpacity}
+                  onChange={(e) => onSignatureOpacityChange(parseInt(e.target.value))}
                   style={{ width: '100%' }}
                 />
                 <span style={{ fontSize: '10px', color: '#999' }}>
-                  {(window as any).signatureOpacity || 80}%
+                  {signatureOpacity}%
                 </span>
+              </div>
+            </div>
+
+            <div className="control-section">
+              <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>🔄 Preview Controls</h4>
+              <div style={{ display: 'flex', gap: '5px', marginBottom: '8px' }}>
+                <button 
+                  className="quality-btn" 
+                  onClick={() => {
+                    const event = new CustomEvent('undo-preview');
+                    window.dispatchEvent(event);
+                  }} 
+                  style={{ flex: 1, color: '#000000', fontSize: '11px' }}
+                >
+                  ↶ Undo
+                </button>
+                <button 
+                  className="quality-btn" 
+                  onClick={() => {
+                    const event = new CustomEvent('redo-preview');
+                    window.dispatchEvent(event);
+                  }} 
+                  style={{ flex: 1, color: '#000000', fontSize: '11px' }}
+                >
+                  ↷ Redo
+                </button>
               </div>
             </div>
 
