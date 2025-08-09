@@ -376,13 +376,16 @@ const QualityPanel: React.FC<Props> = ({
                   type="range" 
                   min="0" 
                   max="100" 
-                  defaultValue="70"
+                  value={(window as any).watermarkOpacity || 70}
                   onChange={(e) => {
                     const event = new CustomEvent('watermark-opacity-change', { detail: { value: e.target.value } });
                     window.dispatchEvent(event);
                   }}
                   style={{ width: '100%' }}
                 />
+                <span style={{ fontSize: '10px', color: '#999' }}>
+                  {(window as any).watermarkOpacity || 70}%
+                </span>
               </div>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ color: '#666', fontSize: '12px', display: 'block', marginBottom: '4px' }}>
@@ -392,13 +395,16 @@ const QualityPanel: React.FC<Props> = ({
                   type="range" 
                   min="0" 
                   max="100" 
-                  defaultValue="80"
+                  value={(window as any).signatureOpacity || 80}
                   onChange={(e) => {
                     const event = new CustomEvent('signature-opacity-change', { detail: { value: e.target.value } });
                     window.dispatchEvent(event);
                   }}
                   style={{ width: '100%' }}
                 />
+                <span style={{ fontSize: '10px', color: '#999' }}>
+                  {(window as any).signatureOpacity || 80}%
+                </span>
               </div>
             </div>
 

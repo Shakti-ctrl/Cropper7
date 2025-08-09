@@ -1516,6 +1516,12 @@ const generateFallbackPreview = () => {
         return false;
     };
 
+    // Expose current values globally for Quality Panel sliders
+    useEffect(() => {
+        (window as any).watermarkOpacity = watermarkOpacity;
+        (window as any).signatureOpacity = signatureOpacity;
+    }, [watermarkOpacity, signatureOpacity]);
+
     // Save session data periodically and on important changes
     useEffect(() => {
         const interval = setInterval(() => {
@@ -1622,11 +1628,15 @@ const generateFallbackPreview = () => {
         };
         
         const handleWatermarkOpacity = (e: CustomEvent) => {
-            setWatermarkOpacity(parseInt(e.detail.value));
+            const value = parseInt(e.detail.value);
+            setWatermarkOpacity(value);
+            (window as any).watermarkOpacity = value; // Expose for sliders
         };
         
         const handleSignatureOpacity = (e: CustomEvent) => {
-            setSignatureOpacity(parseInt(e.detail.value));
+            const value = parseInt(e.detail.value);
+            setSignatureOpacity(value);
+            (window as any).signatureOpacity = value; // Expose for sliders
         };
 
         window.addEventListener('import-watermark', handleImportWatermarkEvent);
@@ -3284,29 +3294,31 @@ const generateFallbackPreview = () => {
                                 }}
                             />
                             
-                            {/* Draggable Watermark Overlay */}
+                            {/* Draggable and Resizable Watermark Overlay */}
                             {enableWatermark && (watermarkText || watermarkImage) && (
                                 <div
                                     style={{
                                         position: 'absolute',
                                         left: `${watermarkPosition.x}%`,
                                         top: `${watermarkPosition.y}%`,
+                                        width: `${watermarkSize.width}px`,
+                                        height: `${watermarkSize.height}px`,
                                         transform: 'translate(-50%, -50%)',
                                         cursor: 'move',
                                         background: 'rgba(255, 255, 255, 0.2)',
-                                        border: '2px dashed rgba(255, 255, 255, 0.5)',
+                                        border: '2px dashed rgba(255, 255, 255, 0.8)',
                                         padding: '4px',
-                                        minWidth: '50px',
-                                        minHeight: '20px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         fontSize: '12px',
-                                        color: 'rgba(255, 255, 255, 0.8)',
+                                        color: 'rgba(255, 255, 255, 0.9)',
                                         userSelect: 'none',
-                                        zIndex: 999
+                                        zIndex: 999,
+                                        opacity: watermarkOpacity / 100
                                     }}
                                     onMouseDown={(e) => {
+                                        if (e.target !== e.currentTarget) return; // Only drag from main area
                                         const container = e.currentTarget.parentElement!;
                                         const rect = container.getBoundingClientRect();
                                         
@@ -3331,33 +3343,87 @@ const generateFallbackPreview = () => {
                                         e.stopPropagation();
                                     }}
                                 >
-                                    {watermarkImage ? '🖼️ Watermark' : (watermarkText || 'Watermark')}
+                                    {watermarkImage ? (
+                                        <img src={watermarkImage} alt="Watermark" style={{ 
+                                            width: '100%', 
+                                            height: '100%', 
+                                            objectFit: 'contain',
+                                            opacity: watermarkOpacity / 100
+                                        }} />
+                                    ) : (
+                                        <span style={{ fontSize: '10px', textAlign: 'center' }}>
+                                            {watermarkText || 'Watermark'}
+                                        </span>
+                                    )}
+                                    
+                                    {/* Resize Handle */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            bottom: '-5px',
+                                            right: '-5px',
+                                            width: '12px',
+                                            height: '12px',
+                                            background: 'white',
+                                            border: '2px solid #007bff',
+                                            borderRadius: '50%',
+                                            cursor: 'se-resize',
+                                            zIndex: 1000
+                                        }}
+                                        onMouseDown={(e) => {
+                                            const startSize = { ...watermarkSize };
+                                            const startX = e.clientX;
+                                            const startY = e.clientY;
+                                            
+                                            const handleMouseMove = (e: MouseEvent) => {
+                                                const deltaX = e.clientX - startX;
+                                                const deltaY = e.clientY - startY;
+                                                
+                                                setWatermarkSize({
+                                                    width: Math.max(30, startSize.width + deltaX),
+                                                    height: Math.max(20, startSize.height + deltaY)
+                                                });
+                                            };
+
+                                            const handleMouseUp = () => {
+                                                document.removeEventListener('mousemove', handleMouseMove);
+                                                document.removeEventListener('mouseup', handleMouseUp);
+                                            };
+
+                                            document.addEventListener('mousemove', handleMouseMove);
+                                            document.addEventListener('mouseup', handleMouseUp);
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    />
                                 </div>
                             )}
                             
-                            {/* Draggable Signature Overlay */}
+                            {/* Draggable and Resizable Signature Overlay */}
                             {enableSignature && (signatureText || signatureImage) && (
                                 <div
                                     style={{
                                         position: 'absolute',
                                         left: `${signaturePosition.x}%`,
                                         top: `${signaturePosition.y}%`,
+                                        width: `${signatureSize.width}px`,
+                                        height: `${signatureSize.height}px`,
                                         transform: 'translate(-50%, -50%)',
                                         cursor: 'move',
                                         background: 'rgba(0, 0, 0, 0.2)',
-                                        border: '2px dashed rgba(0, 0, 0, 0.5)',
+                                        border: '2px dashed rgba(0, 0, 0, 0.8)',
                                         padding: '4px',
-                                        minWidth: '50px',
-                                        minHeight: '20px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         fontSize: '12px',
-                                        color: 'rgba(0, 0, 0, 0.8)',
+                                        color: 'rgba(0, 0, 0, 0.9)',
                                         userSelect: 'none',
-                                        zIndex: 999
+                                        zIndex: 999,
+                                        opacity: signatureOpacity / 100
                                     }}
                                     onMouseDown={(e) => {
+                                        if (e.target !== e.currentTarget) return; // Only drag from main area
                                         const container = e.currentTarget.parentElement!;
                                         const rect = container.getBoundingClientRect();
                                         
@@ -3382,7 +3448,59 @@ const generateFallbackPreview = () => {
                                         e.stopPropagation();
                                     }}
                                 >
-                                    {signatureImage ? '✍️ Signature' : (signatureText || 'Signature')}
+                                    {signatureImage ? (
+                                        <img src={signatureImage} alt="Signature" style={{ 
+                                            width: '100%', 
+                                            height: '100%', 
+                                            objectFit: 'contain',
+                                            opacity: signatureOpacity / 100
+                                        }} />
+                                    ) : (
+                                        <span style={{ fontSize: '10px', textAlign: 'center', fontStyle: 'italic' }}>
+                                            {signatureText || 'Signature'}
+                                        </span>
+                                    )}
+                                    
+                                    {/* Resize Handle */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            bottom: '-5px',
+                                            right: '-5px',
+                                            width: '12px',
+                                            height: '12px',
+                                            background: 'white',
+                                            border: '2px solid #28a745',
+                                            borderRadius: '50%',
+                                            cursor: 'se-resize',
+                                            zIndex: 1000
+                                        }}
+                                        onMouseDown={(e) => {
+                                            const startSize = { ...signatureSize };
+                                            const startX = e.clientX;
+                                            const startY = e.clientY;
+                                            
+                                            const handleMouseMove = (e: MouseEvent) => {
+                                                const deltaX = e.clientX - startX;
+                                                const deltaY = e.clientY - startY;
+                                                
+                                                setSignatureSize({
+                                                    width: Math.max(30, startSize.width + deltaX),
+                                                    height: Math.max(20, startSize.height + deltaY)
+                                                });
+                                            };
+
+                                            const handleMouseUp = () => {
+                                                document.removeEventListener('mousemove', handleMouseMove);
+                                                document.removeEventListener('mouseup', handleMouseUp);
+                                            };
+
+                                            document.addEventListener('mousemove', handleMouseMove);
+                                            document.addEventListener('mouseup', handleMouseUp);
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    />
                                 </div>
                             )}
 
