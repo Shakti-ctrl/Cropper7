@@ -1387,6 +1387,136 @@ const generateFallbackPreview = () => {
         }
     }, [showQualityPanel]);
 
+    // Reset all quality settings function
+    const resetAllQualitySettings = () => {
+        setSelectedFilter(null);
+        setAdjustmentValues(null);
+        setWatermarkText('WATERMARK');
+        setSignatureText('');
+        setEnableWatermark(false);
+        setEnableBorder(false);
+        setEnableSignature(false);
+        setBorderWidth(10);
+        setBorderColor('#000000');
+        setWatermarkOpacity(70);
+        setSignatureOpacity(80);
+        setWatermarkPosition({ x: 80, y: 90 });
+        setSignaturePosition({ x: 5, y: 95 });
+        setWatermarkSize({ width: 200, height: 50 });
+        setSignatureSize({ width: 150, height: 40 });
+        setWatermarkImage('');
+        setSignatureImage('');
+        setBorderImage('');
+        setWatermarkRotation(0);
+        setSignatureRotation(0);
+        
+        // Save to localStorage
+        localStorage.removeItem('qualitySettings');
+        localStorage.removeItem('adjustmentValues');
+        localStorage.removeItem('selectedFilter');
+    };
+
+    // Save adjustments function
+    const handleSaveAdjustments = (applyToAll = false) => {
+        const settings = {
+            selectedFilter,
+            adjustmentValues,
+            watermarkText,
+            signatureText,
+            enableWatermark,
+            enableBorder,
+            enableSignature,
+            borderWidth,
+            borderColor,
+            watermarkOpacity,
+            signatureOpacity,
+            watermarkPosition,
+            signaturePosition,
+            watermarkSize,
+            signatureSize,
+            watermarkImage,
+            signatureImage,
+            borderImage,
+            watermarkRotation,
+            signatureRotation
+        };
+        
+        localStorage.setItem('qualitySettings', JSON.stringify(settings));
+        
+        if (applyToAll) {
+            // Store original cropped images for undo functionality
+            setOriginalCroppedImages({ ...croppedImages });
+            
+            // Apply effects to all cropped images
+            Object.keys(crops).forEach(key => {
+                const index = parseInt(key);
+                const crop = crops[index];
+                if (crop && crop.width && crop.height) {
+                    const enhancedImage = generateEnhancedCroppedImage(crop, index);
+                    if (enhancedImage.dataUrl) {
+                        setCroppedImages(prev => ({
+                            ...prev,
+                            [index]: enhancedImage.dataUrl
+                        }));
+                    }
+                }
+            });
+            
+            alert('✅ Quality settings applied to all images!');
+        } else {
+            alert('💾 Quality settings saved!');
+        }
+    };
+
+    // Undo adjustments function
+    const handleUndoAdjustments = () => {
+        if (Object.keys(originalCroppedImages).length > 0) {
+            setCroppedImages(originalCroppedImages);
+            setOriginalCroppedImages({});
+            alert('↺ Reverted to original images!');
+        }
+    };
+
+    // Load saved adjustments function
+    const loadSavedAdjustments = (loadFromStorage = false) => {
+        if (loadFromStorage) {
+            try {
+                const savedSettings = localStorage.getItem('qualitySettings');
+                if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    
+                    if (settings.selectedFilter) setSelectedFilter(settings.selectedFilter);
+                    if (settings.adjustmentValues) setAdjustmentValues(settings.adjustmentValues);
+                    if (settings.watermarkText) setWatermarkText(settings.watermarkText);
+                    if (settings.signatureText) setSignatureText(settings.signatureText);
+                    if (settings.enableWatermark !== undefined) setEnableWatermark(settings.enableWatermark);
+                    if (settings.enableBorder !== undefined) setEnableBorder(settings.enableBorder);
+                    if (settings.enableSignature !== undefined) setEnableSignature(settings.enableSignature);
+                    if (settings.borderWidth) setBorderWidth(settings.borderWidth);
+                    if (settings.borderColor) setBorderColor(settings.borderColor);
+                    if (settings.watermarkOpacity) setWatermarkOpacity(settings.watermarkOpacity);
+                    if (settings.signatureOpacity) setSignatureOpacity(settings.signatureOpacity);
+                    if (settings.watermarkPosition) setWatermarkPosition(settings.watermarkPosition);
+                    if (settings.signaturePosition) setSignaturePosition(settings.signaturePosition);
+                    if (settings.watermarkSize) setWatermarkSize(settings.watermarkSize);
+                    if (settings.signatureSize) setSignatureSize(settings.signatureSize);
+                    if (settings.watermarkImage) setWatermarkImage(settings.watermarkImage);
+                    if (settings.signatureImage) setSignatureImage(settings.signatureImage);
+                    if (settings.borderImage) setBorderImage(settings.borderImage);
+                    if (settings.watermarkRotation !== undefined) setWatermarkRotation(settings.watermarkRotation);
+                    if (settings.signatureRotation !== undefined) setSignatureRotation(settings.signatureRotation);
+                    
+                    alert('📥 Saved settings loaded successfully!');
+                } else {
+                    alert('⚠️ No saved settings found.');
+                }
+            } catch (error) {
+                console.error('Error loading saved settings:', error);
+                alert('❌ Error loading saved settings.');
+            }
+        }
+    };
+
     // Add event listeners for new Quality Panel functionality
     useEffect(() => {
         const handleImportWatermarkEvent = () => {
@@ -1457,6 +1587,18 @@ const generateFallbackPreview = () => {
             alert('All quality effects have been reset to default values!');
         };
 
+        const handleDeleteWatermark = () => {
+            setWatermarkText('');
+            setWatermarkImage('');
+            setEnableWatermark(false);
+        };
+
+        const handleDeleteSignature = () => {
+            setSignatureText('');
+            setSignatureImage('');
+            setEnableSignature(false);
+        };
+
         const handleWatermarkOpacityChange = (e: Event) => {
              const target = e.target as HTMLInputElement;
              const value = parseInt(target.value);
@@ -1475,6 +1617,8 @@ const generateFallbackPreview = () => {
         window.addEventListener('reset-all-effects', handleResetAllEffects);
         window.addEventListener('watermark-opacity-change', handleWatermarkOpacityChange as EventListener);
         window.addEventListener('signature-opacity-change', handleSignatureOpacityChange as EventListener);
+        window.addEventListener('delete-watermark', handleDeleteWatermark);
+        window.addEventListener('delete-signature', handleDeleteSignature);
 
         return () => {
             window.removeEventListener('import-watermark', handleImportWatermarkEvent);
@@ -1483,6 +1627,8 @@ const generateFallbackPreview = () => {
             window.removeEventListener('reset-all-effects', handleResetAllEffects);
             window.removeEventListener('watermark-opacity-change', handleWatermarkOpacityChange as EventListener);
             window.removeEventListener('signature-opacity-change', handleSignatureOpacityChange as EventListener);
+            window.removeEventListener('delete-watermark', handleDeleteWatermark);
+            window.removeEventListener('delete-signature', handleDeleteSignature);
         };
     }, []);
 
@@ -1492,7 +1638,7 @@ const generateFallbackPreview = () => {
         return () => {
             delete (window as any).loadSavedAdjustments;
         };
-    }, [loadSavedAdjustments]);
+    }, []);
 
     const handleSharePDF = async () => {
         try {

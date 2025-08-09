@@ -401,6 +401,34 @@ const QualityPanel: React.FC<Props> = ({
             </div>
 
             <div className="control-section">
+              <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>🗑️ Delete Elements</h4>
+              <button 
+                className="quality-btn" 
+                onClick={() => {
+                  if (window.confirm('Delete current watermark?')) {
+                    const event = new CustomEvent('delete-watermark');
+                    window.dispatchEvent(event);
+                  }
+                }} 
+                style={{ width: '100%', marginBottom: '8px', color: '#000000', background: '#ffebee' }}
+              >
+                🗑️ Delete Watermark
+              </button>
+              <button 
+                className="quality-btn" 
+                onClick={() => {
+                  if (window.confirm('Delete current signature?')) {
+                    const event = new CustomEvent('delete-signature');
+                    window.dispatchEvent(event);
+                  }
+                }} 
+                style={{ width: '100%', marginBottom: '8px', color: '#000000', background: '#ffebee' }}
+              >
+                🗑️ Delete Signature
+              </button>
+            </div>
+
+            <div className="control-section">
               <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>⚙️ Opacity Controls (Fixed)</h4>
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ color: '#666', fontSize: '12px', display: 'block', marginBottom: '4px' }}>
