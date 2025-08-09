@@ -3853,7 +3853,8 @@ const generateFallbackPreview = () => {
                                         ✕
                                     </div>
                                 </div>
-                            )}
+                                )
+                            ))}
 
                             {/* Draggable and Resizable Signature Overlay */}
                             {enableSignature && (signatureText || signatureImage) && (
