@@ -576,6 +576,7 @@ function Main({ appName, aboutText } :any) {
     const [showAdjustments, setShowAdjustments] = useState<boolean>(false);
     const [showEffects, setShowEffects] = useState<boolean>(false);
     const [showFloatingPreview, setShowFloatingPreview] = useState<boolean>(false);
+    const [showPreviewPopup, setShowPreviewPopup] = useState<boolean>(false);
     const [darkMode, setDarkMode] = useState<boolean>(false);
     const [selectedFilter, setSelectedFilter] = useState<any>(null);
     const [adjustmentValues, setAdjustmentValues] = useState<any>(null);
@@ -587,6 +588,30 @@ function Main({ appName, aboutText } :any) {
     const [enableSignature, setEnableSignature] = useState<boolean>(false);
     const [rearrangeMode, setRearrangeMode] = useState<boolean>(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+    // Border states
+    const [borderWidth, setBorderWidth] = useState<number>(10);
+    const [borderColor, setBorderColor] = useState<string>('#000000');
+
+    // Text styling states for watermark
+    const [watermarkFontSize, setWatermarkFontSize] = useState<number>(24);
+    const [watermarkFontFamily, setWatermarkFontFamily] = useState<string>('Arial');
+    const [watermarkIsBold, setWatermarkIsBold] = useState<boolean>(false);
+    const [watermarkIsItalic, setWatermarkIsItalic] = useState<boolean>(false);
+    const [watermarkTextAlign, setWatermarkTextAlign] = useState<string>('center');
+    const [watermarkTextColor, setWatermarkTextColor] = useState<string>('#FFFFFF');
+
+    // Text styling states for signature
+    const [signatureFontSize, setSignatureFontSize] = useState<number>(18);
+    const [signatureFontFamily, setSignatureFontFamily] = useState<string>('cursive');
+    const [signatureIsBold, setSignatureIsBold] = useState<boolean>(false);
+    const [signatureIsItalic, setSignatureIsItalic] = useState<boolean>(true);
+    const [signatureTextAlign, setSignatureTextAlign] = useState<string>('center');
+    const [signatureTextColor, setSignatureTextColor] = useState<string>('#000000');
+
+    // Text editor popup states
+    const [showWatermarkEditor, setShowWatermarkEditor] = useState<boolean>(false);
+    const [showSignatureEditor, setShowSignatureEditor] = useState<boolean>(false);
 
     // Watermark/Signature/Border state
     const [watermarkOpacity, setWatermarkOpacity] = useState<number>(70);
@@ -936,13 +961,23 @@ function Main({ appName, aboutText } :any) {
             };
             img.src = watermarkImage;
         } else if (watermarkText?.trim()) {
-            const fontSize = Math.max(canvas.width / 20, 16);
-            ctx.font = `${fontSize}px Arial`;
-            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-            ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
-            ctx.lineWidth = 2;
-            ctx.textAlign = 'center';
+            // Enhanced text styling
+            const scaledFontSize = Math.max(canvas.width / 800 * watermarkFontSize, 12);
+            const fontWeight = watermarkIsBold ? 'bold' : 'normal';
+            const fontStyle = watermarkIsItalic ? 'italic' : 'normal';
+            
+            ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${watermarkFontFamily}`;
+            ctx.fillStyle = watermarkTextColor;
+            ctx.strokeStyle = watermarkTextColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 1;
+            ctx.textAlign = watermarkTextAlign as CanvasTextAlign;
             ctx.textBaseline = 'middle';
+
+            // Add text shadow effect
+            ctx.shadowColor = watermarkTextColor === '#FFFFFF' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
+            ctx.shadowBlur = 3;
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 1;
 
             ctx.strokeText(watermarkText, 0, 0);
             ctx.fillText(watermarkText, 0, 0);
@@ -1002,13 +1037,23 @@ function Main({ appName, aboutText } :any) {
             };
             img.src = signatureImage;
         } else if (signatureText?.trim()) {
-            const fontSize = Math.max(canvas.width / 25, 12);
-            ctx.font = `${fontSize}px cursive`;
-            ctx.fillStyle = 'rgba(0, 0, 0, 1)';
-            ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
-            ctx.lineWidth = 1;
-            ctx.textAlign = 'center';
+            // Enhanced text styling
+            const scaledFontSize = Math.max(canvas.width / 800 * signatureFontSize, 10);
+            const fontWeight = signatureIsBold ? 'bold' : 'normal';
+            const fontStyle = signatureIsItalic ? 'italic' : 'normal';
+            
+            ctx.font = `${fontStyle} ${fontWeight} ${scaledFontSize}px ${signatureFontFamily}`;
+            ctx.fillStyle = signatureTextColor;
+            ctx.strokeStyle = signatureTextColor === '#000000' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+            ctx.lineWidth = 0.5;
+            ctx.textAlign = signatureTextAlign as CanvasTextAlign;
             ctx.textBaseline = 'middle';
+
+            // Add subtle text shadow
+            ctx.shadowColor = signatureTextColor === '#000000' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 2;
+            ctx.shadowOffsetX = 0.5;
+            ctx.shadowOffsetY = 0.5;
 
             ctx.strokeText(signatureText, 0, 0);
             ctx.fillText(signatureText, 0, 0);
@@ -1024,6 +1069,9 @@ function Main({ appName, aboutText } :any) {
         if (text !== null) {
             setWatermarkText(text);
             setEnableWatermark(true); // Enable watermark if text is provided
+            
+            // Show text editor popup
+            setShowWatermarkEditor(true);
         }
     };
 
@@ -1045,6 +1093,9 @@ function Main({ appName, aboutText } :any) {
         if (text !== null) {
             setSignatureText(text);
             setEnableSignature(true); // Enable signature if text is provided
+            
+            // Show text editor popup
+            setShowSignatureEditor(true);
         }
     };
 
@@ -1501,6 +1552,19 @@ const generateFallbackPreview = () => {
                     signatureImage,
                     watermarkRotation,
                     signatureRotation,
+                    // Text styling states
+                    watermarkFontSize,
+                    watermarkFontFamily,
+                    watermarkIsBold,
+                    watermarkIsItalic,
+                    watermarkTextAlign,
+                    watermarkTextColor,
+                    signatureFontSize,
+                    signatureFontFamily,
+                    signatureIsBold,
+                    signatureIsItalic,
+                    signatureTextAlign,
+                    signatureTextColor,
                     timestamp: Date.now()
                 };
                 localStorage.setItem('imageCropperSession', JSON.stringify(sessionData));
@@ -1520,7 +1584,7 @@ const generateFallbackPreview = () => {
             clearInterval(interval);
             window.removeEventListener('beforeunload', handleBeforeUnload);
         };
-    }, [files, crops, croppedImages, selectedFiles, tabs, history, selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation]);
+    }, [files, crops, croppedImages, selectedFiles, tabs, history, selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation, watermarkFontSize, watermarkFontFamily, watermarkIsBold, watermarkIsItalic, watermarkTextAlign, watermarkTextColor, signatureFontSize, signatureFontFamily, signatureIsBold, signatureIsItalic, signatureTextAlign, signatureTextColor]);
 
     // Enhanced session restoration
     useEffect(() => {
@@ -1569,6 +1633,20 @@ const generateFallbackPreview = () => {
                             if (sessionData.signatureImage) setSignatureImage(sessionData.signatureImage);
                             if (sessionData.watermarkRotation) setWatermarkRotation(sessionData.watermarkRotation);
                             if (sessionData.signatureRotation) setSignatureRotation(sessionData.signatureRotation);
+                            
+                            // Restore text styling states
+                            if (sessionData.watermarkFontSize) setWatermarkFontSize(sessionData.watermarkFontSize);
+                            if (sessionData.watermarkFontFamily) setWatermarkFontFamily(sessionData.watermarkFontFamily);
+                            if (sessionData.watermarkIsBold !== undefined) setWatermarkIsBold(sessionData.watermarkIsBold);
+                            if (sessionData.watermarkIsItalic !== undefined) setWatermarkIsItalic(sessionData.watermarkIsItalic);
+                            if (sessionData.watermarkTextAlign) setWatermarkTextAlign(sessionData.watermarkTextAlign);
+                            if (sessionData.watermarkTextColor) setWatermarkTextColor(sessionData.watermarkTextColor);
+                            if (sessionData.signatureFontSize) setSignatureFontSize(sessionData.signatureFontSize);
+                            if (sessionData.signatureFontFamily) setSignatureFontFamily(sessionData.signatureFontFamily);
+                            if (sessionData.signatureIsBold !== undefined) setSignatureIsBold(sessionData.signatureIsBold);
+                            if (sessionData.signatureIsItalic !== undefined) setSignatureIsItalic(sessionData.signatureIsItalic);
+                            if (sessionData.signatureTextAlign) setSignatureTextAlign(sessionData.signatureTextAlign);
+                            if (sessionData.signatureTextColor) setSignatureTextColor(sessionData.signatureTextColor);
 
                             // Re-create File objects for the filesData
                             const restoredFiles = sessionData.filesData.map((fileData: any) => {
@@ -3226,7 +3304,7 @@ const generateFallbackPreview = () => {
                         >
                             <div style={{ width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                                 {/* Render the image using its dataUrl or a placeholder */}
-                                {file && files[parseInt(index)] ? (
+                                {files[parseInt(index)] ? (
                                     <img
                                         src={files[parseInt(index)] instanceof File ? URL.createObjectURL(files[parseInt(index)]) : files[parseInt(index)].dataUrl}
                                         alt={`Floating ${parseInt(index) + 1}`}
@@ -3922,9 +4000,6 @@ const generateFallbackPreview = () => {
                             onAddWatermark={handleAddWatermark}
                             onAddBorder={handleAddBorder}
                             onAddSignature={handleAddSignature}
-                            onImportWatermark={handleImportWatermark}
-                            onImportSignature={handleImportSignature}
-                            onImportBorder={handleImportBorder}
                             onShowPreview={handleShowPreview}
                             onSaveAdjustments={handleSaveAdjustments}
                             onUndoAdjustments={handleUndoAdjustments}
@@ -3935,9 +4010,9 @@ const generateFallbackPreview = () => {
                             enableSignature={enableSignature}
                             onToggleSignature={() => setEnableSignature(!enableSignature)}
                             watermarkOpacity={watermarkOpacity}
-                            onWatermarkOpacityChange={(value) => setWatermarkOpacity(value)}
+                            onWatermarkOpacityChange={(value: number) => setWatermarkOpacity(value)}
                             signatureOpacity={signatureOpacity}
-                            onSignatureOpacityChange={(value) => setSignatureOpacity(value)}
+                            onSignatureOpacityChange={(value: number) => setSignatureOpacity(value)}
                         />
 
                         {/* Adjustments Panel Overlay */}
@@ -4098,6 +4173,361 @@ const generateFallbackPreview = () => {
                             </div>
                         </div>
                     </>
+                )}
+
+                {/* Text Editor Popups */}
+                {showWatermarkEditor && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        background: 'rgba(0, 0, 0, 0.8)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10001
+                    }}>
+                        <div style={{
+                            background: 'white',
+                            padding: '30px',
+                            borderRadius: '15px',
+                            width: '500px',
+                            maxHeight: '80vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+                        }}>
+                            <h3 style={{ marginTop: 0, color: '#333', textAlign: 'center' }}>🎨 Watermark Text Editor</h3>
+                            
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Text:</label>
+                                <input
+                                    type="text"
+                                    value={watermarkText}
+                                    onChange={(e) => setWatermarkText(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', border: '2px solid #ddd', borderRadius: '5px', fontSize: '16px' }}
+                                    placeholder="Enter watermark text..."
+                                />
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Font Size:</label>
+                                    <input
+                                        type="range"
+                                        min="12"
+                                        max="72"
+                                        value={watermarkFontSize}
+                                        onChange={(e) => setWatermarkFontSize(parseInt(e.target.value))}
+                                        style={{ width: '100%' }}
+                                    />
+                                    <span style={{ fontSize: '12px', color: '#666' }}>{watermarkFontSize}px</span>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Font Family:</label>
+                                    <select
+                                        value={watermarkFontFamily}
+                                        onChange={(e) => setWatermarkFontFamily(e.target.value)}
+                                        style={{ width: '100%', padding: '8px', border: '2px solid #ddd', borderRadius: '5px' }}
+                                    >
+                                        <option value="Arial">Arial</option>
+                                        <option value="Times New Roman">Times New Roman</option>
+                                        <option value="Helvetica">Helvetica</option>
+                                        <option value="Georgia">Georgia</option>
+                                        <option value="Verdana">Verdana</option>
+                                        <option value="cursive">Cursive</option>
+                                        <option value="monospace">Monospace</option>
+                                        <option value="serif">Serif</option>
+                                        <option value="sans-serif">Sans-serif</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                                <div>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={watermarkIsBold}
+                                            onChange={(e) => setWatermarkIsBold(e.target.checked)}
+                                        />
+                                        <strong>Bold</strong>
+                                    </label>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={watermarkIsItalic}
+                                            onChange={(e) => setWatermarkIsItalic(e.target.checked)}
+                                        />
+                                        <em>Italic</em>
+                                    </label>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Color:</label>
+                                    <input
+                                        type="color"
+                                        value={watermarkTextColor}
+                                        onChange={(e) => setWatermarkTextColor(e.target.value)}
+                                        style={{ width: '100%', height: '40px', border: 'none', borderRadius: '5px' }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Text Align:</label>
+                                <select
+                                    value={watermarkTextAlign}
+                                    onChange={(e) => setWatermarkTextAlign(e.target.value)}
+                                    style={{ width: '100%', padding: '8px', border: '2px solid #ddd', borderRadius: '5px' }}
+                                >
+                                    <option value="left">Left</option>
+                                    <option value="center">Center</option>
+                                    <option value="right">Right</option>
+                                </select>
+                            </div>
+
+                            {/* Live Preview */}
+                            <div style={{
+                                border: '2px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '20px',
+                                marginBottom: '20px',
+                                background: '#f8f9fa',
+                                textAlign: 'center'
+                            }}>
+                                <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>Live Preview:</h4>
+                                <div style={{
+                                    fontSize: `${watermarkFontSize}px`,
+                                    fontFamily: watermarkFontFamily,
+                                    fontWeight: watermarkIsBold ? 'bold' : 'normal',
+                                    fontStyle: watermarkIsItalic ? 'italic' : 'normal',
+                                    textAlign: watermarkTextAlign as any,
+                                    color: watermarkTextColor,
+                                    padding: '10px',
+                                    background: 'white',
+                                    borderRadius: '5px',
+                                    border: '1px solid #ddd'
+                                }}>
+                                    {watermarkText || 'Sample Text'}
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                                <button
+                                    onClick={() => setShowWatermarkEditor(false)}
+                                    style={{
+                                        background: '#4CAF50',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '12px 24px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '16px',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    ✓ Apply Changes
+                                </button>
+                                <button
+                                    onClick={() => setShowWatermarkEditor(false)}
+                                    style={{
+                                        background: '#f44336',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '12px 24px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '16px'
+                                    }}
+                                >
+                                    ✕ Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {showSignatureEditor && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        background: 'rgba(0, 0, 0, 0.8)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10001
+                    }}>
+                        <div style={{
+                            background: 'white',
+                            padding: '30px',
+                            borderRadius: '15px',
+                            width: '500px',
+                            maxHeight: '80vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+                        }}>
+                            <h3 style={{ marginTop: 0, color: '#333', textAlign: 'center' }}>✍️ Signature Text Editor</h3>
+                            
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Text:</label>
+                                <input
+                                    type="text"
+                                    value={signatureText}
+                                    onChange={(e) => setSignatureText(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', border: '2px solid #ddd', borderRadius: '5px', fontSize: '16px' }}
+                                    placeholder="Enter signature text..."
+                                />
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Font Size:</label>
+                                    <input
+                                        type="range"
+                                        min="10"
+                                        max="48"
+                                        value={signatureFontSize}
+                                        onChange={(e) => setSignatureFontSize(parseInt(e.target.value))}
+                                        style={{ width: '100%' }}
+                                    />
+                                    <span style={{ fontSize: '12px', color: '#666' }}>{signatureFontSize}px</span>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Font Family:</label>
+                                    <select
+                                        value={signatureFontFamily}
+                                        onChange={(e) => setSignatureFontFamily(e.target.value)}
+                                        style={{ width: '100%', padding: '8px', border: '2px solid #ddd', borderRadius: '5px' }}
+                                    >
+                                        <option value="cursive">Cursive</option>
+                                        <option value="Arial">Arial</option>
+                                        <option value="Times New Roman">Times New Roman</option>
+                                        <option value="Helvetica">Helvetica</option>
+                                        <option value="Georgia">Georgia</option>
+                                        <option value="Verdana">Verdana</option>
+                                        <option value="monospace">Monospace</option>
+                                        <option value="serif">Serif</option>
+                                        <option value="sans-serif">Sans-serif</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                                <div>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={signatureIsBold}
+                                            onChange={(e) => setSignatureIsBold(e.target.checked)}
+                                        />
+                                        <strong>Bold</strong>
+                                    </label>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={signatureIsItalic}
+                                            onChange={(e) => setSignatureIsItalic(e.target.checked)}
+                                        />
+                                        <em>Italic</em>
+                                    </label>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Color:</label>
+                                    <input
+                                        type="color"
+                                        value={signatureTextColor}
+                                        onChange={(e) => setSignatureTextColor(e.target.value)}
+                                        style={{ width: '100%', height: '40px', border: 'none', borderRadius: '5px' }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>Text Align:</label>
+                                <select
+                                    value={signatureTextAlign}
+                                    onChange={(e) => setSignatureTextAlign(e.target.value)}
+                                    style={{ width: '100%', padding: '8px', border: '2px solid #ddd', borderRadius: '5px' }}
+                                >
+                                    <option value="left">Left</option>
+                                    <option value="center">Center</option>
+                                    <option value="right">Right</option>
+                                </select>
+                            </div>
+
+                            {/* Live Preview */}
+                            <div style={{
+                                border: '2px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '20px',
+                                marginBottom: '20px',
+                                background: '#f8f9fa',
+                                textAlign: 'center'
+                            }}>
+                                <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>Live Preview:</h4>
+                                <div style={{
+                                    fontSize: `${signatureFontSize}px`,
+                                    fontFamily: signatureFontFamily,
+                                    fontWeight: signatureIsBold ? 'bold' : 'normal',
+                                    fontStyle: signatureIsItalic ? 'italic' : 'normal',
+                                    textAlign: signatureTextAlign as any,
+                                    color: signatureTextColor,
+                                    padding: '10px',
+                                    background: 'white',
+                                    borderRadius: '5px',
+                                    border: '1px solid #ddd'
+                                }}>
+                                    {signatureText || 'Sample Signature'}
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                                <button
+                                    onClick={() => setShowSignatureEditor(false)}
+                                    style={{
+                                        background: '#4CAF50',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '12px 24px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '16px',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    ✓ Apply Changes
+                                </button>
+                                <button
+                                    onClick={() => setShowSignatureEditor(false)}
+                                    style={{
+                                        background: '#f44336',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '12px 24px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '16px'
+                                    }}
+                                >
+                                    ✕ Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </>
         </div>

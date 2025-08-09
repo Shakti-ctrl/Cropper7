@@ -13,12 +13,17 @@ interface Props {
   onAddSignature: () => void;
   onShowPreview: () => void;
   onSaveAdjustments: () => void;
+  onUndoAdjustments: () => void;
   enableWatermark: boolean;
   onToggleWatermark: () => void;
   enableBorder: boolean;
   onToggleBorder: () => void;
   enableSignature: boolean;
   onToggleSignature: () => void;
+  watermarkOpacity: number;
+  onWatermarkOpacityChange: (value: number) => void;
+  signatureOpacity: number;
+  onSignatureOpacityChange: (value: number) => void;
 }
 
 const QualityPanel: React.FC<Props> = ({
@@ -34,12 +39,17 @@ const QualityPanel: React.FC<Props> = ({
   onAddSignature,
   onShowPreview,
   onSaveAdjustments,
+  onUndoAdjustments,
   enableWatermark,
   onToggleWatermark,
   enableBorder,
   onToggleBorder,
   enableSignature,
-  onToggleSignature
+  onToggleSignature,
+  watermarkOpacity,
+  onWatermarkOpacityChange,
+  signatureOpacity,
+  onSignatureOpacityChange
 }) => {
   const [position, setPosition] = useState({ x: 50, y: 50 });
   const [size, setSize] = useState({ width: 320, height: 500 });
