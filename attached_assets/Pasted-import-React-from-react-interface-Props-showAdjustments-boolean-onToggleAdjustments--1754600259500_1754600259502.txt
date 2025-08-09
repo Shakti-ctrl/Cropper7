@@ -1,0 +1,203 @@
+import React from 'react';
+
+interface Props {
+  showAdjustments: boolean;
+  onToggleAdjustments: () => void;
+  showEffects: boolean;
+  onToggleEffects: () => void;
+  onSharePDF: () => void;
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
+  onAddWatermark: () => void;
+  onAddBorder: () => void;
+  onAddSignature: () => void;
+  onShowPreview: () => void;
+  onSaveAdjustments: () => void;
+  enableWatermark: boolean;
+  onToggleWatermark: () => void;
+  enableBorder: boolean;
+  onToggleBorder: () => void;
+  enableSignature: boolean;
+  onToggleSignature: () => void;
+}
+
+const QualityPanel: React.FC<Props> = ({
+  showAdjustments,
+  onToggleAdjustments,
+  showEffects,
+  onToggleEffects,
+  onSharePDF,
+  darkMode,
+  onToggleDarkMode,
+  onAddWatermark,
+  onAddBorder,
+  onAddSignature,
+  onShowPreview,
+  onSaveAdjustments,
+  enableWatermark,
+  onToggleWatermark,
+  enableBorder,
+  onToggleBorder,
+  enableSignature,
+  onToggleSignature
+}) => {
+  const handleSharePDF = async () => {
+    try {
+      onSharePDF();
+      if (typeof navigator.share === 'function') {
+        // Will be handled by the parent component
+      } else {
+        // Fallback for browsers without Web Share API
+        alert('PDF sharing initiated! Check your downloads.');
+      }
+    } catch (error) {
+      console.error('Error sharing PDF:', error);
+    }
+  };
+
+  return (
+    <div className="quality-panel">
+      <div className="quality-header">
+        <h3>🎛️ Quality Tools</h3>
+      </div>
+
+      <div className="quality-controls">
+        <div className="control-section">
+          <h4 style={{ color: '#000000' }}>🎨 Image Enhancement</h4>
+          <button 
+            className={`quality-btn ${showAdjustments ? 'active' : ''}`}
+            onClick={onToggleAdjustments}
+            style={{ color: showAdjustments ? 'white' : '#000000' }}
+          >
+            🎛️ Adjustments Panel
+          </button>
+          <button 
+            className={`quality-btn ${showEffects ? 'active' : ''}`}
+            onClick={onToggleEffects}
+            style={{ color: showEffects ? 'white' : '#000000' }}
+          >
+            🎨 Effect Filters
+          </button>
+        </div>
+
+        <div className="control-section">
+          <h4 style={{ color: '#000000' }}>🖼️ Add Elements</h4>
+          <div className="toggle-control" onClick={onToggleWatermark}>
+            <input type="checkbox" checked={enableWatermark} readOnly />
+            <span>Enable Watermark</span>
+          </div>
+          {enableWatermark && (
+            <button className="quality-btn" onClick={onAddWatermark} style={{ color: '#000000' }}>
+              🏷️ Add/Edit Watermark
+            </button>
+          )}
+          <div className="toggle-control" onClick={onToggleBorder}>
+            <input type="checkbox" checked={enableBorder} readOnly />
+            <span>Enable Border</span>
+          </div>
+          {enableBorder && (
+            <button className="quality-btn" onClick={onAddBorder} style={{ color: '#000000' }}>
+              🎨 Add/Edit Border
+            </button>
+          )}
+          <div className="toggle-control" onClick={onToggleSignature}>
+            <input type="checkbox" checked={enableSignature} readOnly />
+            <span>Enable Signature</span>
+          </div>
+          {enableSignature && (
+            <button className="quality-btn" onClick={onAddSignature} style={{ color: '#000000' }}>
+              📝 Add/Edit Signature
+            </button>
+          )}
+        </div>
+
+        <div className="control-section">
+          <h4 style={{ color: '#000000' }}>🎯 Smart Features</h4>
+          <button className="quality-btn" onClick={() => onToggleAdjustments()} style={{ color: '#000000' }}>
+            🤖 AI Background Remove (Blur)
+          </button>
+          <button className="quality-btn" onClick={() => {
+            onToggleAdjustments();
+            // Auto-apply enhancement
+            setTimeout(() => {
+              const event = new CustomEvent('auto-enhance');
+              window.dispatchEvent(event);
+            }, 100);
+          }} style={{ color: '#000000' }}>
+            ✨ Auto Enhance
+          </button>
+          <button className="quality-btn" onClick={() => alert('Smart Crop: Use crop size presets above for smart cropping')} style={{ color: '#000000' }}>
+            🎯 Smart Crop
+          </button>
+        </div>
+
+        <div className="control-section">
+          <h4 style={{ color: '#000000' }}>🎨 Advanced Effects</h4>
+          <button className="quality-btn" onClick={() => {
+            onToggleEffects();
+            // Auto-select blur effect
+            setTimeout(() => {
+              const event = new CustomEvent('select-filter', { detail: { id: 'dreamy' } });
+              window.dispatchEvent(event);
+            }, 100);
+          }} style={{ color: '#000000' }}>
+            🌊 Blur Background
+          </button>
+          <button className="quality-btn" onClick={() => {
+            onToggleEffects();
+            // Auto-select vibrant effect
+            setTimeout(() => {
+              const event = new CustomEvent('select-filter', { detail: { id: 'colors' } });
+              window.dispatchEvent(event);
+            }, 100);
+          }} style={{ color: '#000000' }}>
+            🎨 Color Pop
+          </button>
+          <button className="quality-btn" onClick={() => {
+            onToggleEffects();
+            // Auto-select dramatic effect
+            setTimeout(() => {
+              const event = new CustomEvent('select-filter', { detail: { id: 'dramatic' } });
+              window.dispatchEvent(event);
+            }, 100);
+          }} style={{ color: '#000000' }}>
+            🌟 HDR Effect
+          </button>
+        </div>
+
+        <div className="control-section">
+          <h4 style={{ color: '#000000' }}>🌓 Appearance</h4>
+          <button 
+            className={`quality-btn ${darkMode ? 'active' : ''}`}
+            onClick={onToggleDarkMode}
+            style={{ color: darkMode ? 'white' : '#000000' }}
+          >
+            {darkMode ? '🌙 Dark Mode' : '☀️ Light Mode'}
+          </button>
+        </div>
+
+        <div className="control-section">
+          <h4 style={{ color: '#000000' }}>👁️ Preview & Save</h4>
+          <button className="quality-btn" onClick={onShowPreview} style={{ color: '#000000' }}>
+            👁️ Preview Effects
+          </button>
+          <button className="quality-btn save-btn" onClick={onSaveAdjustments}>
+            💾 Apply to Cropped Images
+          </button>
+        </div>
+
+        <div className="control-section">
+          <h4 style={{ color: '#000000' }}>📲 Share & Export</h4>
+          <button className="quality-btn share-btn" onClick={handleSharePDF}>
+            📲 Share PDF Directly
+          </button>
+          <div className="share-info">
+            <small>📋 Share without downloading to device</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default QualityPanel;

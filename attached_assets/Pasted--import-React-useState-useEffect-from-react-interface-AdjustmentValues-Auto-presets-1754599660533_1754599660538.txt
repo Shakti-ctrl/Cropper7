@@ -1,0 +1,372 @@
+
+import React, { useState, useEffect } from 'react';
+
+interface AdjustmentValues {
+  // Auto presets
+  autoEnhance: boolean;
+  autoColorFix: boolean;
+  autoWhiteBalance: boolean;
+  autoTone: boolean;
+  
+  // Color adjustments
+  saturation: number;
+  vibration: number;
+  temperature: number;
+  tint: number;
+  hue: number;
+  
+  // Light adjustments
+  brightness: number;
+  exposure: number;
+  contrast: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
+  
+  // Detail enhancements
+  sharpen: number;
+  clarity: number;
+  smooth: number;
+  dehaze: number;
+  blur: number;
+  grain: number;
+  
+  // Scene filters
+  vignette: number;
+  glamour: number;
+  bloom: number;
+  glow: number;
+}
+
+interface Props {
+  onAdjustmentChange: (adjustments: AdjustmentValues) => void;
+  onReset: () => void;
+  showComparison: boolean;
+  onToggleComparison: () => void;
+}
+
+const defaultAdjustments: AdjustmentValues = {
+  autoEnhance: false,
+  autoColorFix: false,
+  autoWhiteBalance: false,
+  autoTone: false,
+  saturation: 0,
+  vibration: 0,
+  temperature: 0,
+  tint: 0,
+  hue: 0,
+  brightness: 0,
+  exposure: 0,
+  contrast: 0,
+  highlights: 0,
+  shadows: 0,
+  whites: 0,
+  blacks: 0,
+  sharpen: 0,
+  clarity: 0,
+  smooth: 0,
+  dehaze: 0,
+  blur: 0,
+  grain: 0,
+  vignette: 0,
+  glamour: 0,
+  bloom: 0,
+  glow: 0
+};
+
+const AdjustmentsPanel: React.FC<Props> = ({
+  onAdjustmentChange,
+  onReset,
+  showComparison,
+  onToggleComparison
+}) => {
+  const [activeTab, setActiveTab] = useState<'auto' | 'color' | 'light' | 'detail' | 'scene'>('auto');
+  const [adjustments, setAdjustments] = useState<AdjustmentValues>(defaultAdjustments);
+
+  useEffect(() => {
+    onAdjustmentChange(adjustments);
+  }, [adjustments, onAdjustmentChange]);
+
+  const updateAdjustment = (key: keyof AdjustmentValues, value: number | boolean) => {
+    setAdjustments(prev => ({ ...prev, [key]: value }));
+  };
+
+  const resetAdjustments = () => {
+    setAdjustments(defaultAdjustments);
+    onReset();
+  };
+
+  const applyAutoEnhance = () => {
+    setAdjustments(prev => ({
+      ...prev,
+      autoEnhance: !prev.autoEnhance,
+      brightness: prev.autoEnhance ? 0 : 10,
+      contrast: prev.autoEnhance ? 0 : 15,
+      saturation: prev.autoEnhance ? 0 : 20,
+      sharpen: prev.autoEnhance ? 0 : 25
+    }));
+  };
+
+  const applyAutoColorFix = () => {
+    setAdjustments(prev => ({
+      ...prev,
+      autoColorFix: !prev.autoColorFix,
+      saturation: prev.autoColorFix ? 0 : 25,
+      vibration: prev.autoColorFix ? 0 : 15,
+      temperature: prev.autoColorFix ? 0 : 5
+    }));
+  };
+
+  const SliderControl = ({ 
+    label, 
+    value, 
+    onChange, 
+    min = -100, 
+    max = 100, 
+    step = 1 
+  }: {
+    label: string;
+    value: number;
+    onChange: (value: number) => void;
+    min?: number;
+    max?: number;
+    step?: number;
+  }) => (
+    <div className="slider-control">
+      <label>{label}</label>
+      <div className="slider-wrapper">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="adjustment-slider"
+        />
+        <span className="slider-value">{value}</span>
+      </div>
+    </div>
+  );
+
+  const ToggleControl = ({ 
+    label, 
+    checked, 
+    onChange 
+  }: {
+    label: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+  }) => (
+    <div className="toggle-control" onClick={() => onChange(!checked)}>
+      <input type="checkbox" checked={checked} readOnly />
+      <span>{label}</span>
+    </div>
+  );
+
+  return (
+    <div className="adjustments-panel">
+      <div className="adjustments-header">
+        <h3>🎛️ Adjustments</h3>
+        <div className="adjustment-tabs">
+          {[
+            { key: 'auto', label: '🤖 Auto' },
+            { key: 'color', label: '🎨 Color' },
+            { key: 'light', label: '💡 Light' },
+            { key: 'detail', label: '🔍 Detail' },
+            { key: 'scene', label: '🎭 Scene' }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              className={`tab-button ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.key as any)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="adjustment-content">
+        {activeTab === 'auto' && (
+          <div className="adjustment-group">
+            <h4>🤖 Automatic Enhancements</h4>
+            <ToggleControl
+              label="Auto Enhance"
+              checked={adjustments.autoEnhance}
+              onChange={applyAutoEnhance}
+            />
+            <ToggleControl
+              label="Auto Color Fix"
+              checked={adjustments.autoColorFix}
+              onChange={applyAutoColorFix}
+            />
+            <ToggleControl
+              label="Auto White Balance"
+              checked={adjustments.autoWhiteBalance}
+              onChange={(value) => updateAdjustment('autoWhiteBalance', value)}
+            />
+            <ToggleControl
+              label="Auto Tone"
+              checked={adjustments.autoTone}
+              onChange={(value) => updateAdjustment('autoTone', value)}
+            />
+          </div>
+        )}
+
+        {activeTab === 'color' && (
+          <div className="adjustment-group">
+            <h4>🎨 Color Adjustments</h4>
+            <SliderControl
+              label="Saturation"
+              value={adjustments.saturation}
+              onChange={(value) => updateAdjustment('saturation', value)}
+            />
+            <SliderControl
+              label="Vibration"
+              value={adjustments.vibration}
+              onChange={(value) => updateAdjustment('vibration', value)}
+            />
+            <SliderControl
+              label="Temperature"
+              value={adjustments.temperature}
+              onChange={(value) => updateAdjustment('temperature', value)}
+            />
+            <SliderControl
+              label="Tint"
+              value={adjustments.tint}
+              onChange={(value) => updateAdjustment('tint', value)}
+            />
+            <SliderControl
+              label="Hue"
+              value={adjustments.hue}
+              onChange={(value) => updateAdjustment('hue', value)}
+              min={-180}
+              max={180}
+            />
+          </div>
+        )}
+
+        {activeTab === 'light' && (
+          <div className="adjustment-group">
+            <h4>💡 Light Adjustments</h4>
+            <SliderControl
+              label="Brightness"
+              value={adjustments.brightness}
+              onChange={(value) => updateAdjustment('brightness', value)}
+            />
+            <SliderControl
+              label="Exposure"
+              value={adjustments.exposure}
+              onChange={(value) => updateAdjustment('exposure', value)}
+            />
+            <SliderControl
+              label="Contrast"
+              value={adjustments.contrast}
+              onChange={(value) => updateAdjustment('contrast', value)}
+            />
+            <SliderControl
+              label="Highlights"
+              value={adjustments.highlights}
+              onChange={(value) => updateAdjustment('highlights', value)}
+            />
+            <SliderControl
+              label="Shadows"
+              value={adjustments.shadows}
+              onChange={(value) => updateAdjustment('shadows', value)}
+            />
+            <SliderControl
+              label="Whites"
+              value={adjustments.whites}
+              onChange={(value) => updateAdjustment('whites', value)}
+            />
+            <SliderControl
+              label="Blacks"
+              value={adjustments.blacks}
+              onChange={(value) => updateAdjustment('blacks', value)}
+            />
+          </div>
+        )}
+
+        {activeTab === 'detail' && (
+          <div className="adjustment-group">
+            <h4>🔍 Detail Enhancements</h4>
+            <SliderControl
+              label="Sharpen"
+              value={adjustments.sharpen}
+              onChange={(value) => updateAdjustment('sharpen', value)}
+            />
+            <SliderControl
+              label="Clarity"
+              value={adjustments.clarity}
+              onChange={(value) => updateAdjustment('clarity', value)}
+            />
+            <SliderControl
+              label="Smooth"
+              value={adjustments.smooth}
+              onChange={(value) => updateAdjustment('smooth', value)}
+            />
+            <SliderControl
+              label="Dehaze"
+              value={adjustments.dehaze}
+              onChange={(value) => updateAdjustment('dehaze', value)}
+            />
+            <SliderControl
+              label="Blur"
+              value={adjustments.blur}
+              onChange={(value) => updateAdjustment('blur', value)}
+              min={0}
+              max={20}
+            />
+            <SliderControl
+              label="Grain"
+              value={adjustments.grain}
+              onChange={(value) => updateAdjustment('grain', value)}
+            />
+          </div>
+        )}
+
+        {activeTab === 'scene' && (
+          <div className="adjustment-group">
+            <h4>🎭 Scene Filters</h4>
+            <SliderControl
+              label="Vignette"
+              value={adjustments.vignette}
+              onChange={(value) => updateAdjustment('vignette', value)}
+            />
+            <SliderControl
+              label="Glamour"
+              value={adjustments.glamour}
+              onChange={(value) => updateAdjustment('glamour', value)}
+            />
+            <SliderControl
+              label="Bloom"
+              value={adjustments.bloom}
+              onChange={(value) => updateAdjustment('bloom', value)}
+            />
+            <SliderControl
+              label="Glow"
+              value={adjustments.glow}
+              onChange={(value) => updateAdjustment('glow', value)}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="adjustment-controls">
+        <button 
+          className={`comparison-btn ${showComparison ? 'active' : ''}`}
+          onClick={onToggleComparison}
+        >
+          {showComparison ? '👁️ Hide Compare' : '👁️ Compare'}
+        </button>
+        <button className="reset-btn" onClick={resetAdjustments}>
+          🔄 Reset All
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default AdjustmentsPanel;

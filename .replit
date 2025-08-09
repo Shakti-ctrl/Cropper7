@@ -30,9 +30,6 @@ task = "shell.exec"
 args = "python3 -m http.server 5000"
 waitForPort = 5000
 
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [[workflows.workflow]]
 name = "display_alpha_file"
 author = "agent"

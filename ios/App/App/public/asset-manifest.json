@@ -1,0 +1,34 @@
+{
+  "files": {
+    "main.css": "/batch-images-cropper/static/css/main.4578b9e3.css",
+    "main.js": "/batch-images-cropper/static/js/main.0898ed70.js",
+    "static/js/587.3bd2f04a.chunk.js": "/batch-images-cropper/static/js/587.3bd2f04a.chunk.js",
+    "static/js/125.467afadc.chunk.js": "/batch-images-cropper/static/js/125.467afadc.chunk.js",
+    "static/js/70.b340c023.chunk.js": "/batch-images-cropper/static/js/70.b340c023.chunk.js",
+    "static/js/81.3063ca9b.chunk.js": "/batch-images-cropper/static/js/81.3063ca9b.chunk.js",
+    "static/js/815.b9481ff7.chunk.js": "/batch-images-cropper/static/js/815.b9481ff7.chunk.js",
+    "static/js/681.0c38adba.chunk.js": "/batch-images-cropper/static/js/681.0c38adba.chunk.js",
+    "static/js/787.e4fb1a0b.chunk.js": "/batch-images-cropper/static/js/787.e4fb1a0b.chunk.js",
+    "static/js/498.878a7809.chunk.js": "/batch-images-cropper/static/js/498.878a7809.chunk.js",
+    "static/js/404.d5b8659c.chunk.js": "/batch-images-cropper/static/js/404.d5b8659c.chunk.js",
+    "static/js/598.b43ffc23.chunk.js": "/batch-images-cropper/static/js/598.b43ffc23.chunk.js",
+    "service-worker.js": "/batch-images-cropper/service-worker.js",
+    "index.html": "/batch-images-cropper/index.html",
+    "main.4578b9e3.css.map": "/batch-images-cropper/static/css/main.4578b9e3.css.map",
+    "main.0898ed70.js.map": "/batch-images-cropper/static/js/main.0898ed70.js.map",
+    "587.3bd2f04a.chunk.js.map": "/batch-images-cropper/static/js/587.3bd2f04a.chunk.js.map",
+    "125.467afadc.chunk.js.map": "/batch-images-cropper/static/js/125.467afadc.chunk.js.map",
+    "70.b340c023.chunk.js.map": "/batch-images-cropper/static/js/70.b340c023.chunk.js.map",
+    "81.3063ca9b.chunk.js.map": "/batch-images-cropper/static/js/81.3063ca9b.chunk.js.map",
+    "815.b9481ff7.chunk.js.map": "/batch-images-cropper/static/js/815.b9481ff7.chunk.js.map",
+    "681.0c38adba.chunk.js.map": "/batch-images-cropper/static/js/681.0c38adba.chunk.js.map",
+    "787.e4fb1a0b.chunk.js.map": "/batch-images-cropper/static/js/787.e4fb1a0b.chunk.js.map",
+    "498.878a7809.chunk.js.map": "/batch-images-cropper/static/js/498.878a7809.chunk.js.map",
+    "404.d5b8659c.chunk.js.map": "/batch-images-cropper/static/js/404.d5b8659c.chunk.js.map",
+    "598.b43ffc23.chunk.js.map": "/batch-images-cropper/static/js/598.b43ffc23.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.4578b9e3.css",
+    "static/js/main.0898ed70.js"
+  ]
+}
