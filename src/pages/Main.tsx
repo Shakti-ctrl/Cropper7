@@ -559,6 +559,7 @@ function Main({ appName, aboutText } :any) {
     const [croppedImages, setCroppedImages] = useState<any>({});
     const [gridView, setGridView] = useState(true);
     const [currentView, setCurrentView] = useState<'crop' | 'history'>('crop');
+    const [activeControl, setActiveControl] = useState<string>(''); // 'watermark', 'signature', 'border', or ''
 
     // State for floating images and zoom functionality
     const [floatingImages, setFloatingImages] = useState<{ [key: number]: { position: { x: number, y: number }, size: { width: number, height: number }, visible: boolean } }>({});
@@ -574,30 +575,20 @@ function Main({ appName, aboutText } :any) {
     const [showQualityPanel, setShowQualityPanel] = useState<boolean>(false);
     const [showAdjustments, setShowAdjustments] = useState<boolean>(false);
     const [showEffects, setShowEffects] = useState<boolean>(false);
+    const [showFloatingPreview, setShowFloatingPreview] = useState<boolean>(false);
     const [darkMode, setDarkMode] = useState<boolean>(false);
     const [selectedFilter, setSelectedFilter] = useState<any>(null);
     const [adjustmentValues, setAdjustmentValues] = useState<any>(null);
     const [showComparison, setShowComparison] = useState<boolean>(false);
     const [watermarkText, setWatermarkText] = useState<string>('WATERMARK');
-    const [borderWidth, setBorderWidth] = useState<number>(10);
-    const [borderColor, setBorderColor] = useState<string>('#000000');
-    const [showPreviewPopup, setShowPreviewPopup] = useState<boolean>(false);
-    const [previewImage, setPreviewImage] = useState<string>('');
-    const [qualityPreviewImage, setQualityPreviewImage] = useState<string>('');
-    const [originalCroppedImages, setOriginalCroppedImages] = useState<any>({});
-    const [showFloatingPreview, setShowFloatingPreview] = useState<boolean>(false);
-    const [previewSize, setPreviewSize] = useState({ width: 300, height: 200 });
-    const [previewPosition, setPreviewPosition] = useState({ x: 50, y: 50 });
-    const [isResizing, setIsResizing] = useState<boolean>(false);
-    const [currentPreviewIndex, setCurrentPreviewIndex] = useState<number>(0);
     const [signatureText, setSignatureText] = useState<string>('');
     const [enableWatermark, setEnableWatermark] = useState<boolean>(false);
     const [enableBorder, setEnableBorder] = useState<boolean>(false);
     const [enableSignature, setEnableSignature] = useState<boolean>(false);
     const [rearrangeMode, setRearrangeMode] = useState<boolean>(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-    
-    // New state variables for enhanced watermark/signature features
+
+    // Watermark/Signature/Border state
     const [watermarkOpacity, setWatermarkOpacity] = useState<number>(70);
     const [signatureOpacity, setSignatureOpacity] = useState<number>(80);
     const [watermarkPosition, setWatermarkPosition] = useState({ x: 80, y: 90 }); // Percentage-based position
@@ -607,6 +598,17 @@ function Main({ appName, aboutText } :any) {
     const [watermarkImage, setWatermarkImage] = useState<string>('');
     const [signatureImage, setSignatureImage] = useState<string>('');
     const [borderImage, setBorderImage] = useState<string>('');
+    const [watermarkRotation, setWatermarkRotation] = useState<number>(0);
+    const [signatureRotation, setSignatureRotation] = useState<number>(0);
+
+    // Preview states
+    const [previewImage, setPreviewImage] = useState<string>('');
+    const [qualityPreviewImage, setQualityPreviewImage] = useState<string>('');
+    const [originalCroppedImages, setOriginalCroppedImages] = useState<any>({});
+    const [previewSize, setPreviewSize] = useState({ width: 300, height: 200 });
+    const [previewPosition, setPreviewPosition] = useState({ x: 50, y: 50 });
+    const [isResizing, setIsResizing] = useState<boolean>(false);
+    const [currentPreviewIndex, setCurrentPreviewIndex] = useState<number>(0);
 
     const inputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
@@ -756,6 +758,17 @@ function Main({ appName, aboutText } :any) {
             newSet.delete(index);
             return newSet;
         });
+        // Also remove crop data associated with the removed image
+        setCrops((prevCrops: any) => {
+            const newCrops = { ...prevCrops };
+            delete newCrops[index];
+            return newCrops;
+        });
+        setCroppedImages((prevCroppedImages: any) => {
+            const newCroppedImages = { ...prevCroppedImages };
+            delete newCroppedImages[index];
+            return newCroppedImages;
+        });
     };
 
     // Selection handlers
@@ -843,9 +856,9 @@ function Main({ appName, aboutText } :any) {
             const newCrops = { ...prevCrops };
             Object.keys(newCrops).forEach(key => {
                 const crop = newCrops[key];
-                if (crop.image) {
-                    const centerX = (crop.image.width - (crop.width || 100)) / 2;
-                    const centerY = (crop.image.height - (crop.height || 100)) / 2;
+                if (crop && crop.image) {
+                    const centerX = (crop.image.naturalWidth - (crop.width || 100)) / 2;
+                    const centerY = (crop.image.naturalHeight - (crop.height || 100)) / 2;
                     newCrops[key] = {
                         ...crop,
                         x: Math.max(0, centerX),
@@ -899,107 +912,131 @@ function Main({ appName, aboutText } :any) {
         }
     };
 
+    // Watermark, Border, Signature apply functions
     const addWatermark = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableWatermark) return;
 
-        // If watermark image is provided, use it; otherwise use text
+        const centerX = (watermarkPosition.x / 100) * canvas.width;
+        const centerY = (watermarkPosition.y / 100) * canvas.height;
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate((watermarkRotation * Math.PI) / 180);
+        ctx.globalAlpha = watermarkOpacity / 100;
+
         if (watermarkImage) {
             const img = new Image();
             img.onload = () => {
-                ctx.globalAlpha = watermarkOpacity / 100;
-                const x = (watermarkPosition.x / 100) * canvas.width - watermarkSize.width / 2;
-                const y = (watermarkPosition.y / 100) * canvas.height - watermarkSize.height / 2;
-                ctx.drawImage(img, x, y, watermarkSize.width, watermarkSize.height);
-                ctx.globalAlpha = 1; // Reset alpha
+                ctx.drawImage(img, -watermarkSize.width / 2, -watermarkSize.height / 2, watermarkSize.width, watermarkSize.height);
+                ctx.restore(); // Restore after image load
+            };
+            img.onerror = () => {
+                console.error("Failed to load watermark image");
+                ctx.restore();
             };
             img.src = watermarkImage;
         } else if (watermarkText?.trim()) {
             const fontSize = Math.max(canvas.width / 20, 16);
             ctx.font = `${fontSize}px Arial`;
-            
-            const opacity = watermarkOpacity / 100;
-            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-            ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.7})`;
+            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+            ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
             ctx.lineWidth = 2;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
 
-            const textMetrics = ctx.measureText(watermarkText);
-            const x = (watermarkPosition.x / 100) * canvas.width - textMetrics.width / 2;
-            const y = (watermarkPosition.y / 100) * canvas.height;
-
-            ctx.strokeText(watermarkText, x, y);
-            ctx.fillText(watermarkText, x, y);
+            ctx.strokeText(watermarkText, 0, 0);
+            ctx.fillText(watermarkText, 0, 0);
+            ctx.restore();
+        } else {
+             ctx.restore();
         }
     };
 
     const addBorder = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableBorder || borderWidth <= 0) return;
 
-        // If border image is provided, use it; otherwise use solid color
+        ctx.save();
+        ctx.lineWidth = borderWidth;
         if (borderImage) {
             const img = new Image();
             img.onload = () => {
-                // Create pattern from border image and apply
                 const pattern = ctx.createPattern(img, 'repeat');
                 if (pattern) {
                     ctx.strokeStyle = pattern;
-                    ctx.lineWidth = borderWidth;
                     ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
                 }
+                ctx.restore();
+            };
+            img.onerror = () => {
+                console.error("Failed to load border image");
+                ctx.restore();
             };
             img.src = borderImage;
         } else {
             ctx.strokeStyle = borderColor;
-            ctx.lineWidth = borderWidth;
             ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
+            ctx.restore();
         }
     };
 
     const addSignature = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableSignature) return;
 
-        // If signature image is provided, use it; otherwise use text
+        const centerX = (signaturePosition.x / 100) * canvas.width;
+        const centerY = (signaturePosition.y / 100) * canvas.height;
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate((signatureRotation * Math.PI) / 180);
+        ctx.globalAlpha = signatureOpacity / 100;
+
         if (signatureImage) {
             const img = new Image();
             img.onload = () => {
-                ctx.globalAlpha = signatureOpacity / 100;
-                const x = (signaturePosition.x / 100) * canvas.width - signatureSize.width / 2;
-                const y = (signaturePosition.y / 100) * canvas.height - signatureSize.height / 2;
-                ctx.drawImage(img, x, y, signatureSize.width, signatureSize.height);
-                ctx.globalAlpha = 1; // Reset alpha
+                ctx.drawImage(img, -signatureSize.width / 2, -signatureSize.height / 2, signatureSize.width, signatureSize.height);
+                ctx.restore();
+            };
+            img.onerror = () => {
+                console.error("Failed to load signature image");
+                ctx.restore();
             };
             img.src = signatureImage;
         } else if (signatureText?.trim()) {
             const fontSize = Math.max(canvas.width / 25, 12);
             ctx.font = `${fontSize}px cursive`;
-            
-            const opacity = signatureOpacity / 100;
-            ctx.fillStyle = `rgba(0, 0, 0, ${opacity})`;
-            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
             ctx.lineWidth = 1;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
 
-            const x = (signaturePosition.x / 100) * canvas.width;
-            const y = (signaturePosition.y / 100) * canvas.height;
-
-            ctx.strokeText(signatureText, x, y);
-            ctx.fillText(signatureText, x, y);
+            ctx.strokeText(signatureText, 0, 0);
+            ctx.fillText(signatureText, 0, 0);
+            ctx.restore();
+        } else {
+            ctx.restore();
         }
     };
 
+    // Exported functions for QualityPanel
     const handleAddWatermark = () => {
         const text = prompt('Enter watermark text:', watermarkText);
         if (text !== null) {
             setWatermarkText(text);
+            setEnableWatermark(true); // Enable watermark if text is provided
         }
     };
 
     const handleAddBorder = () => {
-        const width = prompt('Enter border width (pixels):', borderWidth.toString());
-        const color = prompt('Enter border color (hex):', borderColor);
-        if (width !== null && !isNaN(parseInt(width))) {
-            setBorderWidth(parseInt(width));
+        const widthInput = prompt('Enter border width (pixels):', borderWidth.toString());
+        const color = prompt('Enter border color (hex or name, e.g., #FF0000 or red):', borderColor);
+        if (widthInput !== null && !isNaN(parseInt(widthInput))) {
+            setBorderWidth(parseInt(widthInput));
+            setEnableBorder(true); // Enable border if width is provided
         }
-        if (color !== null) {
-            setBorderColor(color);
+        if (color !== null && color.trim() !== '') {
+            setBorderColor(color.trim());
+            setEnableBorder(true); // Enable border if color is provided
         }
     };
 
@@ -1007,6 +1044,7 @@ function Main({ appName, aboutText } :any) {
         const text = prompt('Enter signature text:', signatureText);
         if (text !== null) {
             setSignatureText(text);
+            setEnableSignature(true); // Enable signature if text is provided
         }
     };
 
@@ -1024,7 +1062,7 @@ function Main({ appName, aboutText } :any) {
                     const result = e.target?.result as string;
                     setWatermarkImage(result);
                     setEnableWatermark(true);
-                    alert('Watermark image imported! You can drag and resize it on the floating preview.');
+                    alert('Watermark image imported! You can now drag, resize, and rotate it.');
                 };
                 reader.readAsDataURL(file);
             }
@@ -1045,7 +1083,7 @@ function Main({ appName, aboutText } :any) {
                     const result = e.target?.result as string;
                     setSignatureImage(result);
                     setEnableSignature(true);
-                    alert('Signature image imported! You can drag and resize it on the floating preview.');
+                    alert('Signature image imported! You can now drag, resize, and rotate it.');
                 };
                 reader.readAsDataURL(file);
             }
@@ -1133,6 +1171,9 @@ function Main({ appName, aboutText } :any) {
                 setPreviewImage(canvas.toDataURL());
                 setShowPreviewPopup(true);
             };
+            img.onerror = () => {
+                console.error("Failed to load image for preview");
+            };
             img.src = URL.createObjectURL(firstImageFile);
         } else {
             alert('Please add some images first to preview effects!');
@@ -1141,11 +1182,11 @@ function Main({ appName, aboutText } :any) {
 
     const generateQualityPreview = () => {
     // Use the first cropped image if available, otherwise load original or sample
-    const firstCropKey = Object.keys(crops)[0];
+    const firstCropKey = Object.keys(crops).find(key => crops[key] && crops[key].width && crops[key].height);
 
-    if (firstCropKey && crops[firstCropKey]) {
+    if (firstCropKey) {
         // Generate cropped image for preview with effects applied
-        const crop = crops[firstCropKey];
+        const crop = crops[parseInt(firstCropKey)];
         try {
             const enhancedImage = generateEnhancedCroppedImage(crop, parseInt(firstCropKey));
             if (enhancedImage && enhancedImage.dataUrl) {
@@ -1159,48 +1200,40 @@ function Main({ appName, aboutText } :any) {
             console.error('Error generating quality preview:', error);
             generateFallbackPreview();
         }
+    } else if (files.length > 0) {
+        // If not cropped, load the first original file directly
+        const file = files[0];
+        const imgURL = URL.createObjectURL(file);
+        setQualityPreviewImage(imgURL);
+        setCurrentPreviewIndex(0);
     } else {
-        // If NOT cropped → load original file directly (no blur)
-        if (files.length > 0) {
-            const file = files[0];
-            const imgURL = URL.createObjectURL(file);
-            setQualityPreviewImage(imgURL);
-            setCurrentPreviewIndex(0);
-        } else {
-            generateFallbackPreview();
-        }
+        generateFallbackPreview();
     }
 };
 
 const generateFallbackPreview = () => {
-    if (files.length > 0) {
-        // If a file exists, load it directly without resizing
-        const file = files[0];
-        const imgURL = URL.createObjectURL(file);
-        setQualityPreviewImage(imgURL);
-    } else {
-        // Create sample image
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            canvas.width = 400;
-            canvas.height = 300;
+    // Create sample image
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        canvas.width = 400;
+        canvas.height = 300;
 
-            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-            gradient.addColorStop(0, '#ff7b7b');
-            gradient.addColorStop(0.5, '#667eea');
-            gradient.addColorStop(1, '#764ba2');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        gradient.addColorStop(0, '#ff7b7b');
+        gradient.addColorStop(0.5, '#667eea');
+        gradient.addColorStop(1, '#764ba2');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = 'white';
-            ctx.font = '24px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('Sample Image', canvas.width / 2, canvas.height / 2 - 20);
-            ctx.fillText('Quality Tools Preview', canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillStyle = 'white';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Sample Image', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText('Quality Tools Preview', canvas.width / 2, canvas.height / 2 + 20);
 
-            setQualityPreviewImage(canvas.toDataURL());
-        }
+        setQualityPreviewImage(canvas.toDataURL());
+        setCurrentPreviewIndex(0); // Reset index for fallback
     }
 };
 
@@ -1261,6 +1294,9 @@ const generateFallbackPreview = () => {
 
             setPreviewImage(canvas.toDataURL());
         };
+        img.onerror = () => {
+            console.error("Failed to load quality preview image");
+        };
         img.src = qualityPreviewImage;
     };
 
@@ -1269,8 +1305,7 @@ const generateFallbackPreview = () => {
         if (qualityPreviewImage) {
             applyQualityEffectsToPreview();
         }
-    }, [selectedFilter, adjustmentValues, watermarkText, borderWidth, borderColor, signatureText, enableWatermark, enableBorder, enableSignature, 
-        watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkImage, signatureImage, borderImage, qualityPreviewImage]);
+    }, [selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation, qualityPreviewImage]);
 
     // Auto-generate preview when quality panel opens
     useEffect(() => {
@@ -1321,7 +1356,8 @@ const generateFallbackPreview = () => {
             signatureSize,
             watermarkImage,
             signatureImage,
-            borderImage,
+            watermarkRotation,
+            signatureRotation,
             timestamp: Date.now()
         };
 
@@ -1329,9 +1365,10 @@ const generateFallbackPreview = () => {
 
         // Apply effects to all cropped images immediately
         Object.keys(crops).forEach((key) => {
-            const crop = crops[key];
+            const cropIndex = parseInt(key);
+            const crop = crops[cropIndex];
             if (crop) {
-                const enhancedImage = generateEnhancedCroppedImage(crop, parseInt(key));
+                const enhancedImage = generateEnhancedCroppedImage(crop, cropIndex);
                 setCroppedImages((prev: any) => ({
                     ...prev,
                     [key]: enhancedImage.dataUrl
@@ -1375,10 +1412,12 @@ const generateFallbackPreview = () => {
         setWatermarkImage('');
         setSignatureImage('');
         setBorderImage('');
-        
+        setWatermarkRotation(0);
+        setSignatureRotation(0);
+
         // Clear from localStorage
         localStorage.removeItem('qualityToolsSettings');
-        
+
         // Regenerate preview if quality panel is open
         if (showQualityPanel) {
             generateQualityPreview();
@@ -1407,7 +1446,8 @@ const generateFallbackPreview = () => {
                 setSignatureSize(data.signatureSize || { width: 150, height: 40 });
                 setWatermarkImage(data.watermarkImage || '');
                 setSignatureImage(data.signatureImage || '');
-                setBorderImage(data.borderImage || '');
+                setWatermarkRotation(data.watermarkRotation || 0);
+                setSignatureRotation(data.signatureRotation || 0);
                 if (!fromPreviewPopup) {
                     alert('Quality tool settings loaded!');
                 }
@@ -1417,144 +1457,146 @@ const generateFallbackPreview = () => {
         }
     };
 
-    // Session persistence system - Save complete application state
-    const saveSessionData = () => {
-        const sessionData = {
-            files: files.map(file => ({
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                lastModified: file.lastModified
-                // Note: Cannot save actual File object, will need to be re-uploaded
-            })),
-            crops,
-            croppedImages,
-            selectedFiles: Array.from(selectedFiles),
-            currentTab: tabs.find(t => t.isActive)?.id,
-            tabs,
-            history: history.slice(-10), // Keep last 10 history items
-            gridView,
-            selectedFilter,
-            adjustmentValues,
-            qualitySettings: {
-                watermarkText,
-                borderWidth,
-                borderColor,
-                signatureText,
-                enableWatermark,
-                enableBorder,
-                enableSignature,
-                watermarkOpacity,
-                signatureOpacity,
-                watermarkPosition,
-                signaturePosition,
-                watermarkSize,
-                signatureSize,
-                watermarkImage,
-                signatureImage,
-                borderImage
-            },
-            timestamp: Date.now()
+    // Session persistence - save every 30 seconds including file data
+    useEffect(() => {
+        const saveSession = () => {
+            if (files.length > 0) {
+                const sessionData = {
+                    filesData: files.map((file, index) => ({
+                        name: file.name,
+                        size: file.size,
+                        type: file.type,
+                        lastModified: file.lastModified,
+                        // Note: Storing dataUrl can bloat localStorage, but is necessary for immediate restoration without re-upload.
+                        // Consider optimizing this if it becomes an issue.
+                        dataUrl: file instanceof File ? URL.createObjectURL(file) : file.dataUrl, // Use existing dataUrl or create one
+                        index: index
+                    })),
+                    crops,
+                    croppedImages: Object.keys(croppedImages).reduce((acc, key) => {
+                        acc[key] = croppedImages[key]; // Store base64 data
+                        return acc;
+                    }, {} as any),
+                    selectedFiles: Array.from(selectedFiles),
+                    currentTab: tabs.find(t => t.isActive)?.id,
+                    tabs,
+                    history: history.slice(-10), // Keep last 10 history items
+                    // Save quality settings
+                    selectedFilter,
+                    adjustmentValues,
+                    watermarkText,
+                    signatureText,
+                    borderWidth,
+                    borderColor,
+                    enableWatermark,
+                    enableSignature,
+                    enableBorder,
+                    watermarkOpacity,
+                    signatureOpacity,
+                    watermarkPosition,
+                    signaturePosition,
+                    watermarkSize,
+                    signatureSize,
+                    watermarkImage,
+                    signatureImage,
+                    watermarkRotation,
+                    signatureRotation,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem('imageCropperSession', JSON.stringify(sessionData));
+            }
         };
 
-        localStorage.setItem('appSessionData', JSON.stringify(sessionData));
-    };
+        const interval = setInterval(saveSession, 30000); // Save every 30 seconds
 
-    const loadSessionData = () => {
-        const saved = localStorage.getItem('appSessionData');
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                
-                // Show restore prompt to user
-                if (data.files && data.files.length > 0) {
-                    const shouldRestore = window.confirm(
-                        `Found previous session with ${data.files.length} images and ${Object.keys(data.crops || {}).length} crops. ` +
-                        'Would you like to restore your work? (You will need to re-upload the images)'
-                    );
-                    
-                    if (shouldRestore) {
-                        // Restore state (except actual files which need re-upload)
-                        setCrops(data.crops || {});
-                        setCroppedImages(data.croppedImages || {});
-                        setSelectedFiles(new Set(data.selectedFiles || []));
-                        setTabs(data.tabs || []);
-                        setHistory(data.history || []);
-                        setGridView(data.gridView !== undefined ? data.gridView : true);
-                        
-                        // Restore quality settings
-                        if (data.qualitySettings) {
-                            const q = data.qualitySettings;
-                            setSelectedFilter(data.selectedFilter);
-                            setAdjustmentValues(data.adjustmentValues);
-                            setWatermarkText(q.watermarkText || 'WATERMARK');
-                            setBorderWidth(q.borderWidth || 10);
-                            setBorderColor(q.borderColor || '#000000');
-                            setSignatureText(q.signatureText || '');
-                            setEnableWatermark(q.enableWatermark || false);
-                            setEnableBorder(q.enableBorder || false);
-                            setEnableSignature(q.enableSignature || false);
-                            setWatermarkOpacity(q.watermarkOpacity || 70);
-                            setSignatureOpacity(q.signatureOpacity || 80);
-                            setWatermarkPosition(q.watermarkPosition || { x: 80, y: 90 });
-                            setSignaturePosition(q.signaturePosition || { x: 5, y: 95 });
-                            setWatermarkSize(q.watermarkSize || { width: 200, height: 50 });
-                            setSignatureSize(q.signatureSize || { width: 150, height: 40 });
-                            setWatermarkImage(q.watermarkImage || '');
-                            setSignatureImage(q.signatureImage || '');
-                            setBorderImage(q.borderImage || '');
-                        }
-
-                        alert('Session restored! Please re-upload your images to continue working.');
-                        return true;
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading session data:', error);
-            }
-        }
-        return false;
-    };
-
-    // Expose current values globally for Quality Panel sliders
-    useEffect(() => {
-        (window as any).watermarkOpacity = watermarkOpacity;
-        (window as any).signatureOpacity = signatureOpacity;
-    }, [watermarkOpacity, signatureOpacity]);
-
-    // Save session data periodically and on important changes
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (files.length > 0 || Object.keys(crops).length > 0) {
-                saveSessionData();
-            }
-        }, 30000); // Save every 30 seconds
-
-        return () => clearInterval(interval);
-    }, [files, crops, croppedImages, selectedFiles, tabs, history, gridView, selectedFilter, adjustmentValues,
-        watermarkText, borderWidth, borderColor, signatureText, enableWatermark, enableBorder, enableSignature,
-        watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize,
-        watermarkImage, signatureImage, borderImage]);
-
-    // Save on page unload
-    useEffect(() => {
+        // Save on page unload
         const handleBeforeUnload = () => {
-            if (files.length > 0 || Object.keys(crops).length > 0) {
-                saveSessionData();
-            }
+            saveSession();
         };
 
         window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, []);
 
-    // Load session data on component mount
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [files, crops, croppedImages, selectedFiles, tabs, history, selectedFilter, adjustmentValues, watermarkText, signatureText, borderWidth, borderColor, enableWatermark, enableSignature, enableBorder, watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize, watermarkImage, signatureImage, watermarkRotation, signatureRotation]);
+
+    // Enhanced session restoration
     useEffect(() => {
-        const restored = loadSessionData();
-        if (!restored) {
-            // If no session was restored, load only quality settings
-            loadSavedAdjustments(true);
-        }
+        const restoreSession = async () => {
+            const savedSession = localStorage.getItem('imageCropperSession');
+            if (savedSession) {
+                try {
+                    const sessionData = JSON.parse(savedSession);
+                    const timeDiff = Date.now() - (sessionData.timestamp || 0);
+                    const hoursDiff = timeDiff / (1000 * 60 * 60);
+
+                    if (hoursDiff < 24) { // Only restore sessions less than 24 hours old
+                        const shouldRestore = window.confirm(
+                            `Found a session from ${new Date(sessionData.timestamp).toLocaleString()} with ${sessionData.filesData?.length || 0} files and ${Object.keys(sessionData.crops || {}).length} crops. ` +
+                            'Would you like to restore your previous session with all settings and processed images?'
+                        );
+
+                        if (shouldRestore) {
+                            // Restore core states
+                            setCrops(sessionData.crops || {});
+                            setCroppedImages(sessionData.croppedImages || {});
+                            setSelectedFiles(new Set(sessionData.selectedFiles || []));
+                            setTabs(sessionData.tabs || []);
+                            setHistory(sessionData.history || []);
+                            setActiveTabId(sessionData.currentTab || tabs[0]?.id || 'tab-1');
+                            setGridView(sessionData.gridView !== undefined ? sessionData.gridView : true);
+
+
+                            // Restore quality settings
+                            if (sessionData.selectedFilter) setSelectedFilter(sessionData.selectedFilter);
+                            if (sessionData.adjustmentValues) setAdjustmentValues(sessionData.adjustmentValues);
+                            if (sessionData.watermarkText) setWatermarkText(sessionData.watermarkText);
+                            if (sessionData.signatureText) setSignatureText(sessionData.signatureText);
+                            if (sessionData.borderWidth) setBorderWidth(sessionData.borderWidth);
+                            if (sessionData.borderColor) setBorderColor(sessionData.borderColor);
+                            if (sessionData.enableWatermark) setEnableWatermark(sessionData.enableWatermark);
+                            if (sessionData.enableSignature) setEnableSignature(sessionData.enableSignature);
+                            if (sessionData.enableBorder) setEnableBorder(sessionData.enableBorder);
+                            if (sessionData.watermarkOpacity) setWatermarkOpacity(sessionData.watermarkOpacity);
+                            if (sessionData.signatureOpacity) setSignatureOpacity(sessionData.signatureOpacity);
+                            if (sessionData.watermarkPosition) setWatermarkPosition(sessionData.watermarkPosition);
+                            if (sessionData.signaturePosition) setSignaturePosition(sessionData.signaturePosition);
+                            if (sessionData.watermarkSize) setWatermarkSize(sessionData.watermarkSize);
+                            if (sessionData.signatureSize) setSignatureSize(sessionData.signatureSize);
+                            if (sessionData.watermarkImage) setWatermarkImage(sessionData.watermarkImage);
+                            if (sessionData.signatureImage) setSignatureImage(sessionData.signatureImage);
+                            if (sessionData.watermarkRotation) setWatermarkRotation(sessionData.watermarkRotation);
+                            if (sessionData.signatureRotation) setSignatureRotation(sessionData.signatureRotation);
+
+                            // Re-create File objects for the filesData
+                            const restoredFiles = sessionData.filesData.map((fileData: any) => {
+                                // Create a File object from dataUrl (this is a workaround as original File objects are not preserved)
+                                // This might not be perfect and might require re-upload for full functionality.
+                                // For simplicity here, we'll just use the dataUrl directly if available, or create a placeholder.
+                                if (fileData.dataUrl) {
+                                    return { ...fileData, isRestored: true }; // Mark as restored
+                                }
+                                return { ...fileData, isRestored: true }; // Placeholder if dataUrl is missing
+                            });
+                            setFiles(restoredFiles);
+
+
+                            alert(`Session restored! All your settings, crops, and processed images are back. You might need to re-upload images if they weren't fully preserved.`);
+                        }
+                    } else {
+                        // Clean up old sessions (older than 24 hours)
+                        localStorage.removeItem('imageCropperSession');
+                    }
+                } catch (error) {
+                    console.error('Error restoring session:', error);
+                    localStorage.removeItem('imageCropperSession');
+                }
+            }
+        };
+
+        restoreSession();
     }, []); // Run only once on mount
 
     // Add event listeners for new Quality Panel functionality
@@ -1572,14 +1614,14 @@ const generateFallbackPreview = () => {
                         const result = e.target?.result as string;
                         setWatermarkImage(result);
                         setEnableWatermark(true);
-                        alert('Watermark image imported! You can drag and resize it on the floating preview.');
+                        alert('Watermark image imported! You can now drag, resize, and rotate it.');
                     };
                     reader.readAsDataURL(file);
                 }
             };
             input.click();
         };
-        
+
         const handleImportSignatureEvent = () => {
             const input = document.createElement('input');
             input.type = 'file';
@@ -1593,14 +1635,14 @@ const generateFallbackPreview = () => {
                         const result = e.target?.result as string;
                         setSignatureImage(result);
                         setEnableSignature(true);
-                        alert('Signature image imported! You can drag and resize it on the floating preview.');
+                        alert('Signature image imported! You can now drag, resize, and rotate it.');
                     };
                     reader.readAsDataURL(file);
                 }
             };
             input.click();
         };
-        
+
         const handleImportBorderEvent = () => {
             const input = document.createElement('input');
             input.type = 'file';
@@ -1621,38 +1663,38 @@ const generateFallbackPreview = () => {
             };
             input.click();
         };
-        
+
         const handleResetAllEffects = () => {
             resetAllQualitySettings();
             alert('All quality effects have been reset to default values!');
         };
-        
-        const handleWatermarkOpacity = (e: CustomEvent) => {
-            const value = parseInt(e.detail.value);
-            setWatermarkOpacity(value);
-            (window as any).watermarkOpacity = value; // Expose for sliders
+
+        const handleWatermarkOpacityChange = (e: Event) => {
+             const target = e.target as HTMLInputElement;
+             const value = parseInt(target.value);
+             setWatermarkOpacity(value);
         };
-        
-        const handleSignatureOpacity = (e: CustomEvent) => {
-            const value = parseInt(e.detail.value);
+
+        const handleSignatureOpacityChange = (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            const value = parseInt(target.value);
             setSignatureOpacity(value);
-            (window as any).signatureOpacity = value; // Expose for sliders
         };
 
         window.addEventListener('import-watermark', handleImportWatermarkEvent);
         window.addEventListener('import-signature', handleImportSignatureEvent);
         window.addEventListener('import-border', handleImportBorderEvent);
         window.addEventListener('reset-all-effects', handleResetAllEffects);
-        window.addEventListener('watermark-opacity-change', handleWatermarkOpacity as EventListener);
-        window.addEventListener('signature-opacity-change', handleSignatureOpacity as EventListener);
+        window.addEventListener('watermark-opacity-change', handleWatermarkOpacityChange as EventListener);
+        window.addEventListener('signature-opacity-change', handleSignatureOpacityChange as EventListener);
 
         return () => {
             window.removeEventListener('import-watermark', handleImportWatermarkEvent);
             window.removeEventListener('import-signature', handleImportSignatureEvent);
             window.removeEventListener('import-border', handleImportBorderEvent);
             window.removeEventListener('reset-all-effects', handleResetAllEffects);
-            window.removeEventListener('watermark-opacity-change', handleWatermarkOpacity as EventListener);
-            window.removeEventListener('signature-opacity-change', handleSignatureOpacity as EventListener);
+            window.removeEventListener('watermark-opacity-change', handleWatermarkOpacityChange as EventListener);
+            window.removeEventListener('signature-opacity-change', handleSignatureOpacityChange as EventListener);
         };
     }, []);
 
@@ -1898,20 +1940,14 @@ const generateFallbackPreview = () => {
             // Reset filter for overlays
             ctx.filter = 'none';
 
-            // Add watermark if enabled
-            if (enableWatermark && watermarkText && watermarkText.trim()) {
-                addWatermark(canvas, ctx);
-            }
+            // Add watermark
+            addWatermark(canvas, ctx);
 
-            // Add border if enabled
-            if (enableBorder && borderWidth > 0) {
-                addBorder(canvas, ctx);
-            }
+            // Add border
+            addBorder(canvas, ctx);
 
-            // Add signature if enabled
-            if (enableSignature && signatureText && signatureText.trim()) {
-                addSignature(canvas, ctx);
-            }
+            // Add signature
+            addSignature(canvas, ctx);
 
             return {
                 canvas,
@@ -2230,7 +2266,7 @@ const generateFallbackPreview = () => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [crops]);
+    }, [crops]); // Depend on crops to re-register if crops change
 
     // Total file size calculation
     const getTotalFileSize = () => {
@@ -2294,10 +2330,10 @@ const generateFallbackPreview = () => {
             const fromCrop = newCrops[fromIndex];
             const toCrop = newCrops[toIndex];
 
-            if (fromCrop) newCrops[toIndex] = fromCrop;
+            if (fromCrop) newCrops[toIndex] = { ...fromCrop, image: files[toIndex] }; // Update image reference
             else delete newCrops[toIndex];
 
-            if (toCrop) newCrops[fromIndex] = toCrop;
+            if (toCrop) newCrops[fromIndex] = { ...toCrop, image: files[fromIndex] }; // Update image reference
             else delete newCrops[fromIndex];
 
             // Update selected files - simple swap
@@ -2328,7 +2364,7 @@ const generateFallbackPreview = () => {
 
     // Navigation functions for floating preview
     const goToNextPreviewImage = () => {
-        const croppedImageKeys = Object.keys(crops).filter(key => crops[key] && crops[key].width && crops[key].height);
+        const croppedImageKeys = Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height);
         if (croppedImageKeys.length === 0) return;
 
         const currentKeyIndex = croppedImageKeys.indexOf(currentPreviewIndex.toString());
@@ -2353,7 +2389,7 @@ const generateFallbackPreview = () => {
     };
 
     const goToPrevPreviewImage = () => {
-        const croppedImageKeys = Object.keys(crops).filter(key => crops[key] && crops[key].width && crops[key].height);
+        const croppedImageKeys = Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height);
         if (croppedImageKeys.length === 0) return;
 
         const currentKeyIndex = croppedImageKeys.indexOf(currentPreviewIndex.toString());
@@ -2378,7 +2414,7 @@ const generateFallbackPreview = () => {
     };
 
     const getProcessedCount = () => {
-        return Object.keys(crops).filter(key => crops[key]?.width && crops[key]?.height).length;
+        return Object.keys(crops).filter(key => crops[parseInt(key)]?.width && crops[parseInt(key)]?.height).length;
     };
 
     // Toggle zoom for a specific image
@@ -2840,7 +2876,7 @@ const generateFallbackPreview = () => {
                                 color: "white",
                                 maxWidth: gridView ? "none" : "none",
                                 margin: gridView ? "0" : "0",
-                                height: gridView ? "calc(100vh - 200px)" : "auto",
+                                height: gridView ? "calc(100vh - 380px)" : "auto", // Adjusted height to fit content
                                 overflowY: gridView ? "auto" : "visible"
                             }}>
                                 {files.length === 0 && (
@@ -2868,6 +2904,10 @@ const generateFallbackPreview = () => {
                                                          background: rearrangeMode ? "rgba(33, 150, 243, 0.1)" : "transparent",
                                                          transformOrigin: "center",
                                                          zIndex: isZoomed ? 1000 : 1,
+                                                         borderBottomLeftRadius: isSelected ? "10px" : "0.5rem", // Custom border for selection
+                                                         borderBottomRightRadius: isSelected ? "10px" : "0.5rem",
+                                                         borderTopLeftRadius: isSelected ? "10px" : "0.5rem",
+                                                         borderTopRightRadius: isSelected ? "10px" : "0.5rem",
                                                      }}
                                                      onMouseDown={(e) => {
                                                          if (!rearrangeMode) {
@@ -2943,8 +2983,8 @@ const generateFallbackPreview = () => {
                                                             onClick={(e) => { e.stopPropagation(); toggleZoom(actualIndex); }}
                                                             style={{
                                                                 background: isZoomed ? "#FFEB3B" : "#9C27B0",
-                                                                border: "none",
                                                                 color: isZoomed ? "#333" : "white",
+                                                                border: "none",
                                                                 padding: "4px 8px",
                                                                 borderRadius: "50%",
                                                                 cursor: "pointer",
@@ -3185,17 +3225,24 @@ const generateFallbackPreview = () => {
                             borderColor="#28a745"
                         >
                             <div style={{ width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                                <img
-                                    src={URL.createObjectURL(files[parseInt(index)])}
-                                    alt={`Floating ${parseInt(index) + 1}`}
-                                    style={{
-                                        width: '100%',
-                                        height: 'calc(100% - 30px)', // Adjust height to make space for controls
-                                        objectFit: 'contain',
-                                        borderBottom: '1px solid #eee'
-                                    }}
-                                    draggable={false}
-                                />
+                                {/* Render the image using its dataUrl or a placeholder */}
+                                {file && files[parseInt(index)] ? (
+                                    <img
+                                        src={files[parseInt(index)] instanceof File ? URL.createObjectURL(files[parseInt(index)]) : files[parseInt(index)].dataUrl}
+                                        alt={`Floating ${parseInt(index) + 1}`}
+                                        style={{
+                                            width: '100%',
+                                            height: 'calc(100% - 30px)', // Adjust height to make space for controls
+                                            objectFit: 'contain',
+                                            borderBottom: '1px solid #eee'
+                                        }}
+                                        draggable={false}
+                                    />
+                                ) : (
+                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                                        Image data not available
+                                    </div>
+                                )}
                                 <div style={{ display: 'flex', justifyContent: 'space-around', padding: '5px', height: '30px', background: '#f0f0f0' }}>
                                     <button
                                         onClick={() => toggleZoom(parseInt(index))}
@@ -3269,7 +3316,7 @@ const generateFallbackPreview = () => {
                                 document.addEventListener('mouseup', handleMouseUp);
                             }}
                         >
-                            <span>🖼️ Live Preview ({currentPreviewIndex + 1}/{Object.keys(crops).filter(key => crops[key] && crops[key].width && crops[key].height).length})</span>
+                            <span>🖼️ Live Preview ({currentPreviewIndex + 1}/{Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height).length})</span>
                             <button
                                 onClick={() => setShowFloatingPreview(false)}
                                 style={{
@@ -3293,7 +3340,7 @@ const generateFallbackPreview = () => {
                                     objectFit: 'contain'
                                 }}
                             />
-                            
+
                             {/* Draggable and Resizable Watermark Overlay */}
                             {enableWatermark && (watermarkText || watermarkImage) && (
                                 <div
@@ -3303,10 +3350,9 @@ const generateFallbackPreview = () => {
                                         top: `${watermarkPosition.y}%`,
                                         width: `${watermarkSize.width}px`,
                                         height: `${watermarkSize.height}px`,
-                                        transform: 'translate(-50%, -50%)',
-                                        cursor: 'move',
-                                        background: 'rgba(255, 255, 255, 0.2)',
-                                        border: '2px dashed rgba(255, 255, 255, 0.8)',
+                                        transform: `translate(-50%, -50%) rotate(${watermarkRotation}deg)`,
+                                        background: activeControl === 'watermark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                                        border: activeControl === 'watermark' ? '2px solid #007bff' : '2px dashed rgba(255, 255, 255, 0.5)',
                                         padding: '4px',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -3314,21 +3360,25 @@ const generateFallbackPreview = () => {
                                         fontSize: '12px',
                                         color: 'rgba(255, 255, 255, 0.9)',
                                         userSelect: 'none',
-                                        zIndex: 999,
+                                        zIndex: activeControl === 'watermark' ? 1001 : 999,
+                                        cursor: 'move',
                                         opacity: watermarkOpacity / 100
                                     }}
+                                    onMouseEnter={() => setActiveControl('watermark')}
+                                    onMouseLeave={() => setActiveControl('')}
                                     onMouseDown={(e) => {
-                                        if (e.target !== e.currentTarget) return; // Only drag from main area
+                                        if (e.target !== e.currentTarget) return;
+                                        setActiveControl('watermark');
                                         const container = e.currentTarget.parentElement!;
                                         const rect = container.getBoundingClientRect();
-                                        
+
                                         const handleMouseMove = (e: MouseEvent) => {
                                             const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
                                             const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
-                                            
+
                                             setWatermarkPosition({
-                                                x: Math.max(5, Math.min(95, x)),
-                                                y: Math.max(5, Math.min(95, y))
+                                                x: Math.max(10, Math.min(90, x)),
+                                                y: Math.max(10, Math.min(90, y))
                                             });
                                         };
 
@@ -3348,40 +3398,42 @@ const generateFallbackPreview = () => {
                                             width: '100%', 
                                             height: '100%', 
                                             objectFit: 'contain',
-                                            opacity: watermarkOpacity / 100
+                                            pointerEvents: 'none'
                                         }} />
                                     ) : (
-                                        <span style={{ fontSize: '10px', textAlign: 'center' }}>
+                                        <span style={{ fontSize: '10px', textAlign: 'center', pointerEvents: 'none' }}>
                                             {watermarkText || 'Watermark'}
                                         </span>
                                     )}
-                                    
-                                    {/* Resize Handle */}
+
+                                    {/* Corner Resize Handles */}
                                     <div
                                         style={{
                                             position: 'absolute',
-                                            bottom: '-5px',
-                                            right: '-5px',
+                                            bottom: '-6px',
+                                            right: '-6px',
                                             width: '12px',
                                             height: '12px',
-                                            background: 'white',
-                                            border: '2px solid #007bff',
-                                            borderRadius: '50%',
-                                            cursor: 'se-resize',
-                                            zIndex: 1000
+                                            background: '#007bff',
+                                            border: '2px solid white',
+                                            borderRadius: '2px',
+                                            cursor: 'nw-resize',
+                                            zIndex: 1002,
+                                            display: activeControl === 'watermark' ? 'block' : 'none'
                                         }}
+                                        title="Resize"
                                         onMouseDown={(e) => {
                                             const startSize = { ...watermarkSize };
                                             const startX = e.clientX;
                                             const startY = e.clientY;
-                                            
+
                                             const handleMouseMove = (e: MouseEvent) => {
                                                 const deltaX = e.clientX - startX;
                                                 const deltaY = e.clientY - startY;
-                                                
+
                                                 setWatermarkSize({
-                                                    width: Math.max(30, startSize.width + deltaX),
-                                                    height: Math.max(20, startSize.height + deltaY)
+                                                    width: Math.max(50, startSize.width + deltaX),
+                                                    height: Math.max(30, startSize.height + deltaY)
                                                 });
                                             };
 
@@ -3396,9 +3448,55 @@ const generateFallbackPreview = () => {
                                             e.stopPropagation();
                                         }}
                                     />
+
+                                    {/* Rotation Handle */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-20px',
+                                            left: '50%',
+                                            width: '16px',
+                                            height: '16px',
+                                            background: '#28a745',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            cursor: 'grab',
+                                            transform: 'translateX(-50%)',
+                                            zIndex: 1002,
+                                            display: activeControl === 'watermark' ? 'flex' : 'none',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white'
+                                        }}
+                                        title="Rotate"
+                                        onMouseDown={(e) => {
+                                            const container = e.currentTarget.parentElement!;
+                                            const rect = container.getBoundingClientRect();
+                                            const centerX = rect.left + rect.width / 2;
+                                            const centerY = rect.top + rect.height / 2;
+
+                                            const handleMouseMove = (e: MouseEvent) => {
+                                                const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+                                                setWatermarkRotation(angle);
+                                            };
+
+                                            const handleMouseUp = () => {
+                                                document.removeEventListener('mousemove', handleMouseMove);
+                                                document.removeEventListener('mouseup', handleMouseUp);
+                                            };
+
+                                            document.addEventListener('mousemove', handleMouseMove);
+                                            document.addEventListener('mouseup', handleMouseUp);
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        ↻
+                                    </div>
                                 </div>
                             )}
-                            
+
                             {/* Draggable and Resizable Signature Overlay */}
                             {enableSignature && (signatureText || signatureImage) && (
                                 <div
@@ -3408,10 +3506,9 @@ const generateFallbackPreview = () => {
                                         top: `${signaturePosition.y}%`,
                                         width: `${signatureSize.width}px`,
                                         height: `${signatureSize.height}px`,
-                                        transform: 'translate(-50%, -50%)',
-                                        cursor: 'move',
-                                        background: 'rgba(0, 0, 0, 0.2)',
-                                        border: '2px dashed rgba(0, 0, 0, 0.8)',
+                                        transform: `translate(-50%, -50%) rotate(${signatureRotation}deg)`,
+                                        background: activeControl === 'signature' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
+                                        border: activeControl === 'signature' ? '2px solid #28a745' : '2px dashed rgba(0, 0, 0, 0.5)',
                                         padding: '4px',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -3419,21 +3516,25 @@ const generateFallbackPreview = () => {
                                         fontSize: '12px',
                                         color: 'rgba(0, 0, 0, 0.9)',
                                         userSelect: 'none',
-                                        zIndex: 999,
+                                        zIndex: activeControl === 'signature' ? 1001 : 999,
+                                        cursor: 'move',
                                         opacity: signatureOpacity / 100
                                     }}
+                                    onMouseEnter={() => setActiveControl('signature')}
+                                    onMouseLeave={() => setActiveControl('')}
                                     onMouseDown={(e) => {
-                                        if (e.target !== e.currentTarget) return; // Only drag from main area
+                                        if (e.target !== e.currentTarget) return;
+                                        setActiveControl('signature');
                                         const container = e.currentTarget.parentElement!;
                                         const rect = container.getBoundingClientRect();
-                                        
+
                                         const handleMouseMove = (e: MouseEvent) => {
                                             const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
                                             const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
-                                            
+
                                             setSignaturePosition({
-                                                x: Math.max(5, Math.min(95, x)),
-                                                y: Math.max(5, Math.min(95, y))
+                                                x: Math.max(10, Math.min(90, x)),
+                                                y: Math.max(10, Math.min(90, y))
                                             });
                                         };
 
@@ -3453,40 +3554,42 @@ const generateFallbackPreview = () => {
                                             width: '100%', 
                                             height: '100%', 
                                             objectFit: 'contain',
-                                            opacity: signatureOpacity / 100
+                                            pointerEvents: 'none'
                                         }} />
                                     ) : (
-                                        <span style={{ fontSize: '10px', textAlign: 'center', fontStyle: 'italic' }}>
+                                        <span style={{ fontSize: '10px', textAlign: 'center', fontStyle: 'italic', pointerEvents: 'none' }}>
                                             {signatureText || 'Signature'}
                                         </span>
                                     )}
-                                    
-                                    {/* Resize Handle */}
+
+                                    {/* Corner Resize Handle */}
                                     <div
                                         style={{
                                             position: 'absolute',
-                                            bottom: '-5px',
-                                            right: '-5px',
+                                            bottom: '-6px',
+                                            right: '-6px',
                                             width: '12px',
                                             height: '12px',
-                                            background: 'white',
-                                            border: '2px solid #28a745',
-                                            borderRadius: '50%',
-                                            cursor: 'se-resize',
-                                            zIndex: 1000
+                                            background: '#28a745',
+                                            border: '2px solid white',
+                                            borderRadius: '2px',
+                                            cursor: 'nw-resize',
+                                            zIndex: 1002,
+                                            display: activeControl === 'signature' ? 'block' : 'none'
                                         }}
+                                        title="Resize"
                                         onMouseDown={(e) => {
                                             const startSize = { ...signatureSize };
                                             const startX = e.clientX;
                                             const startY = e.clientY;
-                                            
+
                                             const handleMouseMove = (e: MouseEvent) => {
                                                 const deltaX = e.clientX - startX;
                                                 const deltaY = e.clientY - startY;
-                                                
+
                                                 setSignatureSize({
-                                                    width: Math.max(30, startSize.width + deltaX),
-                                                    height: Math.max(20, startSize.height + deltaY)
+                                                    width: Math.max(50, startSize.width + deltaX),
+                                                    height: Math.max(30, startSize.height + deltaY)
                                                 });
                                             };
 
@@ -3501,11 +3604,57 @@ const generateFallbackPreview = () => {
                                             e.stopPropagation();
                                         }}
                                     />
+
+                                    {/* Rotation Handle */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-20px',
+                                            left: '50%',
+                                            width: '16px',
+                                            height: '16px',
+                                            background: '#dc3545',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            cursor: 'grab',
+                                            transform: 'translateX(-50%)',
+                                            zIndex: 1002,
+                                            display: activeControl === 'signature' ? 'flex' : 'none',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white'
+                                        }}
+                                        title="Rotate"
+                                        onMouseDown={(e) => {
+                                            const container = e.currentTarget.parentElement!;
+                                            const rect = container.getBoundingClientRect();
+                                            const centerX = rect.left + rect.width / 2;
+                                            const centerY = rect.top + rect.height / 2;
+
+                                            const handleMouseMove = (e: MouseEvent) => {
+                                                const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+                                                setSignatureRotation(angle);
+                                            };
+
+                                            const handleMouseUp = () => {
+                                                document.removeEventListener('mousemove', handleMouseMove);
+                                                document.removeEventListener('mouseup', handleMouseUp);
+                                            };
+
+                                            document.addEventListener('mousemove', handleMouseMove);
+                                            document.addEventListener('mouseup', handleMouseUp);
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        ↻
+                                    </div>
                                 </div>
                             )}
 
                             {/* Navigation Buttons */}
-                            {Object.keys(crops).filter(key => crops[key] && crops[key].width && crops[key].height).length > 1 && (
+                            {Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height).length > 1 && (
                                 <>
                                     {/* Previous Image Button */}
                                     <button
@@ -3773,14 +3922,22 @@ const generateFallbackPreview = () => {
                             onAddWatermark={handleAddWatermark}
                             onAddBorder={handleAddBorder}
                             onAddSignature={handleAddSignature}
+                            onImportWatermark={handleImportWatermark}
+                            onImportSignature={handleImportSignature}
+                            onImportBorder={handleImportBorder}
                             onShowPreview={handleShowPreview}
                             onSaveAdjustments={handleSaveAdjustments}
+                            onUndoAdjustments={handleUndoAdjustments}
                             enableWatermark={enableWatermark}
                             onToggleWatermark={() => setEnableWatermark(!enableWatermark)}
                             enableBorder={enableBorder}
                             onToggleBorder={() => setEnableBorder(!enableBorder)}
                             enableSignature={enableSignature}
                             onToggleSignature={() => setEnableSignature(!enableSignature)}
+                            watermarkOpacity={watermarkOpacity}
+                            onWatermarkOpacityChange={(value) => setWatermarkOpacity(value)}
+                            signatureOpacity={signatureOpacity}
+                            onSignatureOpacityChange={(value) => setSignatureOpacity(value)}
                         />
 
                         {/* Adjustments Panel Overlay */}
@@ -3869,7 +4026,7 @@ const generateFallbackPreview = () => {
                                 </div>
                             </div>
                             <div className="preview-content">
-                                {Object.keys(crops).filter(key => crops[key] && crops[key].width && crops[key].height).length === 0 ? (
+                                {Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height).length === 0 ? (
                                     <div style={{ textAlign: 'center', padding: '15px', color: '#666', fontSize: '12px' }}>
                                         <p>⚠️ First crop some images</p>
                                         <p>to see preview here</p>
