@@ -596,6 +596,17 @@ function Main({ appName, aboutText } :any) {
     const [enableSignature, setEnableSignature] = useState<boolean>(false);
     const [rearrangeMode, setRearrangeMode] = useState<boolean>(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    
+    // New state variables for enhanced watermark/signature features
+    const [watermarkOpacity, setWatermarkOpacity] = useState<number>(70);
+    const [signatureOpacity, setSignatureOpacity] = useState<number>(80);
+    const [watermarkPosition, setWatermarkPosition] = useState({ x: 80, y: 90 }); // Percentage-based position
+    const [signaturePosition, setSignaturePosition] = useState({ x: 5, y: 95 }); // Percentage-based position
+    const [watermarkSize, setWatermarkSize] = useState({ width: 200, height: 50 });
+    const [signatureSize, setSignatureSize] = useState({ width: 150, height: 40 });
+    const [watermarkImage, setWatermarkImage] = useState<string>('');
+    const [signatureImage, setSignatureImage] = useState<string>('');
+    const [borderImage, setBorderImage] = useState<string>('');
 
     const inputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
@@ -889,45 +900,89 @@ function Main({ appName, aboutText } :any) {
     };
 
     const addWatermark = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
-        if (!enableWatermark || !watermarkText?.trim()) return;
+        if (!enableWatermark) return;
 
-        const fontSize = Math.max(canvas.width / 20, 16);
-        ctx.font = `${fontSize}px Arial`;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.lineWidth = 2;
+        // If watermark image is provided, use it; otherwise use text
+        if (watermarkImage) {
+            const img = new Image();
+            img.onload = () => {
+                ctx.globalAlpha = watermarkOpacity / 100;
+                const x = (watermarkPosition.x / 100) * canvas.width - watermarkSize.width / 2;
+                const y = (watermarkPosition.y / 100) * canvas.height - watermarkSize.height / 2;
+                ctx.drawImage(img, x, y, watermarkSize.width, watermarkSize.height);
+                ctx.globalAlpha = 1; // Reset alpha
+            };
+            img.src = watermarkImage;
+        } else if (watermarkText?.trim()) {
+            const fontSize = Math.max(canvas.width / 20, 16);
+            ctx.font = `${fontSize}px Arial`;
+            
+            const opacity = watermarkOpacity / 100;
+            ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.7})`;
+            ctx.lineWidth = 2;
 
-        const textMetrics = ctx.measureText(watermarkText);
-        const textWidth = textMetrics.width;
-        const x = canvas.width - textWidth - 20;
-        const y = canvas.height - 20;
+            const textMetrics = ctx.measureText(watermarkText);
+            const x = (watermarkPosition.x / 100) * canvas.width - textMetrics.width / 2;
+            const y = (watermarkPosition.y / 100) * canvas.height;
 
-        ctx.strokeText(watermarkText, x, y);
-        ctx.fillText(watermarkText, x, y);
+            ctx.strokeText(watermarkText, x, y);
+            ctx.fillText(watermarkText, x, y);
+        }
     };
 
     const addBorder = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableBorder || borderWidth <= 0) return;
 
-        ctx.strokeStyle = borderColor;
-        ctx.lineWidth = borderWidth;
-        ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
+        // If border image is provided, use it; otherwise use solid color
+        if (borderImage) {
+            const img = new Image();
+            img.onload = () => {
+                // Create pattern from border image and apply
+                const pattern = ctx.createPattern(img, 'repeat');
+                if (pattern) {
+                    ctx.strokeStyle = pattern;
+                    ctx.lineWidth = borderWidth;
+                    ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
+                }
+            };
+            img.src = borderImage;
+        } else {
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = borderWidth;
+            ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
+        }
     };
 
     const addSignature = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
-        if (!enableSignature || !signatureText?.trim()) return;
+        if (!enableSignature) return;
 
-        const fontSize = Math.max(canvas.width / 25, 12);
-        ctx.font = `${fontSize}px cursive`;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.lineWidth = 1;
+        // If signature image is provided, use it; otherwise use text
+        if (signatureImage) {
+            const img = new Image();
+            img.onload = () => {
+                ctx.globalAlpha = signatureOpacity / 100;
+                const x = (signaturePosition.x / 100) * canvas.width - signatureSize.width / 2;
+                const y = (signaturePosition.y / 100) * canvas.height - signatureSize.height / 2;
+                ctx.drawImage(img, x, y, signatureSize.width, signatureSize.height);
+                ctx.globalAlpha = 1; // Reset alpha
+            };
+            img.src = signatureImage;
+        } else if (signatureText?.trim()) {
+            const fontSize = Math.max(canvas.width / 25, 12);
+            ctx.font = `${fontSize}px cursive`;
+            
+            const opacity = signatureOpacity / 100;
+            ctx.fillStyle = `rgba(0, 0, 0, ${opacity})`;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+            ctx.lineWidth = 1;
 
-        const x = 20;
-        const y = canvas.height - 20;
+            const x = (signaturePosition.x / 100) * canvas.width;
+            const y = (signaturePosition.y / 100) * canvas.height;
 
-        ctx.strokeText(signatureText, x, y);
-        ctx.fillText(signatureText, x, y);
+            ctx.strokeText(signatureText, x, y);
+            ctx.fillText(signatureText, x, y);
+        }
     };
 
     const handleAddWatermark = () => {
@@ -953,6 +1008,70 @@ function Main({ appName, aboutText } :any) {
         if (text !== null) {
             setSignatureText(text);
         }
+    };
+
+    // Import functions for watermark, signature, and border images
+    const handleImportWatermark = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const result = e.target?.result as string;
+                    setWatermarkImage(result);
+                    setEnableWatermark(true);
+                    alert('Watermark image imported! You can drag and resize it on the floating preview.');
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        input.click();
+    };
+
+    const handleImportSignature = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const result = e.target?.result as string;
+                    setSignatureImage(result);
+                    setEnableSignature(true);
+                    alert('Signature image imported! You can drag and resize it on the floating preview.');
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        input.click();
+    };
+
+    const handleImportBorder = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const result = e.target?.result as string;
+                    setBorderImage(result);
+                    setEnableBorder(true);
+                    alert('Border pattern imported! It will be used as a repeating pattern for the border.');
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        input.click();
     };
 
     const handleShowPreview = () => {
@@ -1145,12 +1264,13 @@ const generateFallbackPreview = () => {
         img.src = qualityPreviewImage;
     };
 
-    // Apply effects automatically when quality settings change
+    // Apply effects automatically when quality settings change (including new opacity and position settings)
     useEffect(() => {
         if (qualityPreviewImage) {
             applyQualityEffectsToPreview();
         }
-    }, [selectedFilter, adjustmentValues, watermarkText, borderWidth, borderColor, signatureText, enableWatermark, enableBorder, enableSignature, qualityPreviewImage]);
+    }, [selectedFilter, adjustmentValues, watermarkText, borderWidth, borderColor, signatureText, enableWatermark, enableBorder, enableSignature, 
+        watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkImage, signatureImage, borderImage, qualityPreviewImage]);
 
     // Auto-generate preview when quality panel opens
     useEffect(() => {
@@ -1193,6 +1313,15 @@ const generateFallbackPreview = () => {
             enableWatermark,
             enableBorder,
             enableSignature,
+            watermarkOpacity,
+            signatureOpacity,
+            watermarkPosition,
+            signaturePosition,
+            watermarkSize,
+            signatureSize,
+            watermarkImage,
+            signatureImage,
+            borderImage,
             timestamp: Date.now()
         };
 
@@ -1219,18 +1348,40 @@ const generateFallbackPreview = () => {
         if (Object.keys(originalCroppedImages).length > 0) {
             setCroppedImages(originalCroppedImages);
             setOriginalCroppedImages({});
-            setSelectedFilter(null);
-            setAdjustmentValues(null);
-            setWatermarkText('WATERMARK');
-            setBorderWidth(10);
-            setBorderColor('#000000');
-            setSignatureText('');
-            setEnableWatermark(false);
-            setEnableBorder(false);
-            setEnableSignature(false);
+            resetAllQualitySettings();
             alert('Changes reverted to original cropped images!');
         } else {
             alert('No previous version to undo to!');
+        }
+    };
+
+    // Reset all quality tools to default values
+    const resetAllQualitySettings = () => {
+        setSelectedFilter(null);
+        setAdjustmentValues(null);
+        setWatermarkText('WATERMARK');
+        setBorderWidth(10);
+        setBorderColor('#000000');
+        setSignatureText('');
+        setEnableWatermark(false);
+        setEnableBorder(false);
+        setEnableSignature(false);
+        setWatermarkOpacity(70);
+        setSignatureOpacity(80);
+        setWatermarkPosition({ x: 80, y: 90 });
+        setSignaturePosition({ x: 5, y: 95 });
+        setWatermarkSize({ width: 200, height: 50 });
+        setSignatureSize({ width: 150, height: 40 });
+        setWatermarkImage('');
+        setSignatureImage('');
+        setBorderImage('');
+        
+        // Clear from localStorage
+        localStorage.removeItem('qualityToolsSettings');
+        
+        // Regenerate preview if quality panel is open
+        if (showQualityPanel) {
+            generateQualityPreview();
         }
     };
 
@@ -1248,6 +1399,15 @@ const generateFallbackPreview = () => {
                 setEnableWatermark(data.enableWatermark || false);
                 setEnableBorder(data.enableBorder || false);
                 setEnableSignature(data.enableSignature || false);
+                setWatermarkOpacity(data.watermarkOpacity || 70);
+                setSignatureOpacity(data.signatureOpacity || 80);
+                setWatermarkPosition(data.watermarkPosition || { x: 80, y: 90 });
+                setSignaturePosition(data.signaturePosition || { x: 5, y: 95 });
+                setWatermarkSize(data.watermarkSize || { width: 200, height: 50 });
+                setSignatureSize(data.signatureSize || { width: 150, height: 40 });
+                setWatermarkImage(data.watermarkImage || '');
+                setSignatureImage(data.signatureImage || '');
+                setBorderImage(data.borderImage || '');
                 if (!fromPreviewPopup) {
                     alert('Quality tool settings loaded!');
                 }
@@ -1256,6 +1416,235 @@ const generateFallbackPreview = () => {
             }
         }
     };
+
+    // Session persistence system - Save complete application state
+    const saveSessionData = () => {
+        const sessionData = {
+            files: files.map(file => ({
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                lastModified: file.lastModified
+                // Note: Cannot save actual File object, will need to be re-uploaded
+            })),
+            crops,
+            croppedImages,
+            selectedFiles: Array.from(selectedFiles),
+            currentTab: tabs.find(t => t.isActive)?.id,
+            tabs,
+            history: history.slice(-10), // Keep last 10 history items
+            gridView,
+            selectedFilter,
+            adjustmentValues,
+            qualitySettings: {
+                watermarkText,
+                borderWidth,
+                borderColor,
+                signatureText,
+                enableWatermark,
+                enableBorder,
+                enableSignature,
+                watermarkOpacity,
+                signatureOpacity,
+                watermarkPosition,
+                signaturePosition,
+                watermarkSize,
+                signatureSize,
+                watermarkImage,
+                signatureImage,
+                borderImage
+            },
+            timestamp: Date.now()
+        };
+
+        localStorage.setItem('appSessionData', JSON.stringify(sessionData));
+    };
+
+    const loadSessionData = () => {
+        const saved = localStorage.getItem('appSessionData');
+        if (saved) {
+            try {
+                const data = JSON.parse(saved);
+                
+                // Show restore prompt to user
+                if (data.files && data.files.length > 0) {
+                    const shouldRestore = window.confirm(
+                        `Found previous session with ${data.files.length} images and ${Object.keys(data.crops || {}).length} crops. ` +
+                        'Would you like to restore your work? (You will need to re-upload the images)'
+                    );
+                    
+                    if (shouldRestore) {
+                        // Restore state (except actual files which need re-upload)
+                        setCrops(data.crops || {});
+                        setCroppedImages(data.croppedImages || {});
+                        setSelectedFiles(new Set(data.selectedFiles || []));
+                        setTabs(data.tabs || []);
+                        setHistory(data.history || []);
+                        setGridView(data.gridView !== undefined ? data.gridView : true);
+                        
+                        // Restore quality settings
+                        if (data.qualitySettings) {
+                            const q = data.qualitySettings;
+                            setSelectedFilter(data.selectedFilter);
+                            setAdjustmentValues(data.adjustmentValues);
+                            setWatermarkText(q.watermarkText || 'WATERMARK');
+                            setBorderWidth(q.borderWidth || 10);
+                            setBorderColor(q.borderColor || '#000000');
+                            setSignatureText(q.signatureText || '');
+                            setEnableWatermark(q.enableWatermark || false);
+                            setEnableBorder(q.enableBorder || false);
+                            setEnableSignature(q.enableSignature || false);
+                            setWatermarkOpacity(q.watermarkOpacity || 70);
+                            setSignatureOpacity(q.signatureOpacity || 80);
+                            setWatermarkPosition(q.watermarkPosition || { x: 80, y: 90 });
+                            setSignaturePosition(q.signaturePosition || { x: 5, y: 95 });
+                            setWatermarkSize(q.watermarkSize || { width: 200, height: 50 });
+                            setSignatureSize(q.signatureSize || { width: 150, height: 40 });
+                            setWatermarkImage(q.watermarkImage || '');
+                            setSignatureImage(q.signatureImage || '');
+                            setBorderImage(q.borderImage || '');
+                        }
+
+                        alert('Session restored! Please re-upload your images to continue working.');
+                        return true;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading session data:', error);
+            }
+        }
+        return false;
+    };
+
+    // Save session data periodically and on important changes
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (files.length > 0 || Object.keys(crops).length > 0) {
+                saveSessionData();
+            }
+        }, 30000); // Save every 30 seconds
+
+        return () => clearInterval(interval);
+    }, [files, crops, croppedImages, selectedFiles, tabs, history, gridView, selectedFilter, adjustmentValues,
+        watermarkText, borderWidth, borderColor, signatureText, enableWatermark, enableBorder, enableSignature,
+        watermarkOpacity, signatureOpacity, watermarkPosition, signaturePosition, watermarkSize, signatureSize,
+        watermarkImage, signatureImage, borderImage]);
+
+    // Save on page unload
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            if (files.length > 0 || Object.keys(crops).length > 0) {
+                saveSessionData();
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, []);
+
+    // Load session data on component mount
+    useEffect(() => {
+        const restored = loadSessionData();
+        if (!restored) {
+            // If no session was restored, load only quality settings
+            loadSavedAdjustments(true);
+        }
+    }, []); // Run only once on mount
+
+    // Add event listeners for new Quality Panel functionality
+    useEffect(() => {
+        const handleImportWatermarkEvent = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = (e: Event) => {
+                const target = e.target as HTMLInputElement;
+                const file = target.files?.[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const result = e.target?.result as string;
+                        setWatermarkImage(result);
+                        setEnableWatermark(true);
+                        alert('Watermark image imported! You can drag and resize it on the floating preview.');
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        };
+        
+        const handleImportSignatureEvent = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = (e: Event) => {
+                const target = e.target as HTMLInputElement;
+                const file = target.files?.[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const result = e.target?.result as string;
+                        setSignatureImage(result);
+                        setEnableSignature(true);
+                        alert('Signature image imported! You can drag and resize it on the floating preview.');
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        };
+        
+        const handleImportBorderEvent = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = (e: Event) => {
+                const target = e.target as HTMLInputElement;
+                const file = target.files?.[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const result = e.target?.result as string;
+                        setBorderImage(result);
+                        setEnableBorder(true);
+                        alert('Border pattern imported! It will be used as a repeating pattern for the border.');
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        };
+        
+        const handleResetAllEffects = () => {
+            resetAllQualitySettings();
+            alert('All quality effects have been reset to default values!');
+        };
+        
+        const handleWatermarkOpacity = (e: CustomEvent) => {
+            setWatermarkOpacity(parseInt(e.detail.value));
+        };
+        
+        const handleSignatureOpacity = (e: CustomEvent) => {
+            setSignatureOpacity(parseInt(e.detail.value));
+        };
+
+        window.addEventListener('import-watermark', handleImportWatermarkEvent);
+        window.addEventListener('import-signature', handleImportSignatureEvent);
+        window.addEventListener('import-border', handleImportBorderEvent);
+        window.addEventListener('reset-all-effects', handleResetAllEffects);
+        window.addEventListener('watermark-opacity-change', handleWatermarkOpacity as EventListener);
+        window.addEventListener('signature-opacity-change', handleSignatureOpacity as EventListener);
+
+        return () => {
+            window.removeEventListener('import-watermark', handleImportWatermarkEvent);
+            window.removeEventListener('import-signature', handleImportSignatureEvent);
+            window.removeEventListener('import-border', handleImportBorderEvent);
+            window.removeEventListener('reset-all-effects', handleResetAllEffects);
+            window.removeEventListener('watermark-opacity-change', handleWatermarkOpacity as EventListener);
+            window.removeEventListener('signature-opacity-change', handleSignatureOpacity as EventListener);
+        };
+    }, []);
 
     // Make function available on window object
     useEffect(() => {
@@ -2894,6 +3283,108 @@ const generateFallbackPreview = () => {
                                     objectFit: 'contain'
                                 }}
                             />
+                            
+                            {/* Draggable Watermark Overlay */}
+                            {enableWatermark && (watermarkText || watermarkImage) && (
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        left: `${watermarkPosition.x}%`,
+                                        top: `${watermarkPosition.y}%`,
+                                        transform: 'translate(-50%, -50%)',
+                                        cursor: 'move',
+                                        background: 'rgba(255, 255, 255, 0.2)',
+                                        border: '2px dashed rgba(255, 255, 255, 0.5)',
+                                        padding: '4px',
+                                        minWidth: '50px',
+                                        minHeight: '20px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '12px',
+                                        color: 'rgba(255, 255, 255, 0.8)',
+                                        userSelect: 'none',
+                                        zIndex: 999
+                                    }}
+                                    onMouseDown={(e) => {
+                                        const container = e.currentTarget.parentElement!;
+                                        const rect = container.getBoundingClientRect();
+                                        
+                                        const handleMouseMove = (e: MouseEvent) => {
+                                            const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
+                                            const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
+                                            
+                                            setWatermarkPosition({
+                                                x: Math.max(5, Math.min(95, x)),
+                                                y: Math.max(5, Math.min(95, y))
+                                            });
+                                        };
+
+                                        const handleMouseUp = () => {
+                                            document.removeEventListener('mousemove', handleMouseMove);
+                                            document.removeEventListener('mouseup', handleMouseUp);
+                                        };
+
+                                        document.addEventListener('mousemove', handleMouseMove);
+                                        document.addEventListener('mouseup', handleMouseUp);
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                    }}
+                                >
+                                    {watermarkImage ? '🖼️ Watermark' : (watermarkText || 'Watermark')}
+                                </div>
+                            )}
+                            
+                            {/* Draggable Signature Overlay */}
+                            {enableSignature && (signatureText || signatureImage) && (
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        left: `${signaturePosition.x}%`,
+                                        top: `${signaturePosition.y}%`,
+                                        transform: 'translate(-50%, -50%)',
+                                        cursor: 'move',
+                                        background: 'rgba(0, 0, 0, 0.2)',
+                                        border: '2px dashed rgba(0, 0, 0, 0.5)',
+                                        padding: '4px',
+                                        minWidth: '50px',
+                                        minHeight: '20px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '12px',
+                                        color: 'rgba(0, 0, 0, 0.8)',
+                                        userSelect: 'none',
+                                        zIndex: 999
+                                    }}
+                                    onMouseDown={(e) => {
+                                        const container = e.currentTarget.parentElement!;
+                                        const rect = container.getBoundingClientRect();
+                                        
+                                        const handleMouseMove = (e: MouseEvent) => {
+                                            const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
+                                            const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
+                                            
+                                            setSignaturePosition({
+                                                x: Math.max(5, Math.min(95, x)),
+                                                y: Math.max(5, Math.min(95, y))
+                                            });
+                                        };
+
+                                        const handleMouseUp = () => {
+                                            document.removeEventListener('mousemove', handleMouseMove);
+                                            document.removeEventListener('mouseup', handleMouseUp);
+                                        };
+
+                                        document.addEventListener('mousemove', handleMouseMove);
+                                        document.addEventListener('mouseup', handleMouseUp);
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                    }}
+                                >
+                                    {signatureImage ? '✍️ Signature' : (signatureText || 'Signature')}
+                                </div>
+                            )}
 
                             {/* Navigation Buttons */}
                             {Object.keys(crops).filter(key => crops[key] && crops[key].width && crops[key].height).length > 1 && (

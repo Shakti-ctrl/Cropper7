@@ -1,12 +1,35 @@
-# Smart Image Cropper
+# Educational Repository: Alpha Rays and Radiation
 
 ## Overview
 
-Smart Image Cropper is a professional-grade, privacy-first image processing application that runs entirely in the browser. The application provides powerful batch cropping tools with advanced quality enhancement features, supporting multiple export formats including individual images, ZIP archives, and PDF documents with OCR capabilities. Built as a Progressive Web App (PWA), it offers complete offline functionality while ensuring user data never leaves their device.
+This repository contains a comprehensive educational file about alpha rays and radiation, providing detailed scientific information for learning and research purposes. The main educational content is stored in `alpha.txt` and covers all aspects of alpha radiation from basic principles to advanced applications.
+
+## Primary Content: Smart Image Cropper Application
+
+The repository also includes a fully functional Smart Image Cropper - a professional-grade, privacy-first image processing application that runs entirely in the browser. The application provides powerful batch cropping tools with advanced quality enhancement features, supporting multiple export formats including individual images, ZIP archives, and PDF documents with OCR capabilities. Built as a Progressive Web App (PWA), it offers complete offline functionality while ensuring user data never leaves their device.
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+
+## Recent Changes (August 2025)
+
+### Enhanced Quality Tools Features
+- **Reset Button**: Added comprehensive reset functionality that clears all applied effects, filters, adjustments, watermarks, signatures, and borders with one click
+- **Import System**: New import buttons for watermark images (PNG/JPG), signature images (PNG/JPG), and border patterns (image files used as repeating patterns)
+- **Opacity Controls**: Added separate opacity sliders for watermarks (0-100%) and signatures (0-100%) in the Quality Tools panel
+- **Draggable Elements**: Watermarks and signatures are now draggable and repositionable on the floating preview window with visual feedback overlays
+- **Enhanced Persistence**: All new settings (opacity, position, imported images) are saved in localStorage and restored on page refresh
+
+### Session Persistence System
+- **Complete State Restoration**: Automatic saving of uploaded images metadata, crops, cropped images, selected files, tabs, and history every 30 seconds
+- **Smart Recovery**: On page refresh, users are prompted to restore previous sessions with option to continue where they left off
+- **Data Protection**: Session data saved on page unload to prevent work loss during accidental browser closure
+
+### Layout Optimization
+- **Full-Width Design**: Removed CSS max-width constraints (600px) to utilize complete screen width
+- **Responsive Flexbox**: Inspiration section expanded to flex:3, shortcuts section optimized to flex:1 for better space distribution
+- **Container Optimization**: All containers now use full width with proper box-sizing and stretch alignment
 
 ## System Architecture
 
@@ -25,8 +48,10 @@ Preferred communication style: Simple, everyday language.
 - **Batch Operations**: Optimized memory-efficient processing for 100+ images simultaneously
 - **Filter System**: 20+ professional filters organized by categories (Black & White, Vintage, Creative, Instagram-style)
 - **Quality Tools**: Comprehensive adjustment system including brightness, contrast, saturation, hue, blur, sharpen, and advanced effects
-- **Watermarking**: Custom text watermarks with transparency controls
-- **Border System**: Configurable colored borders with adjustable width
+- **Advanced Watermarking**: Support for both text and image watermarks with opacity controls (0-100%), percentage-based positioning, and drag-to-reposition functionality
+- **Enhanced Signatures**: Text and image signature support with independent opacity controls and draggable positioning on preview
+- **Smart Border System**: Configurable colored borders with adjustable width, plus support for image-based repeating border patterns
+- **Interactive Preview**: Floating preview window with draggable watermark and signature overlays for precise positioning
 
 ### Export and File Handling
 - **Multi-Format Export**: PNG images, ZIP archives, and PDF documents
@@ -45,8 +70,9 @@ Preferred communication style: Simple, everyday language.
 ### Privacy and Security Architecture
 - **Zero-Server Processing**: All image processing occurs locally in the browser
 - **No Data Collection**: Images never leave the user's device
-- **Local Storage**: Browser-based storage for settings and temporary data
-- **Memory Management**: Efficient cleanup of image objects to prevent memory leaks
+- **Enhanced Local Storage**: Browser-based storage for settings, session data, quality adjustments, and imported assets
+- **Session Management**: Automatic periodic saving (30-second intervals) with smart recovery prompts on page refresh
+- **Memory Management**: Efficient cleanup of image objects to prevent memory leaks, plus careful handling of imported image assets
 
 ## External Dependencies
 

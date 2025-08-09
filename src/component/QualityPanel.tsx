@@ -333,6 +333,76 @@ const QualityPanel: React.FC<Props> = ({
             </div>
 
             <div className="control-section">
+              <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>📥 Import Elements</h4>
+              <button 
+                className="quality-btn" 
+                onClick={() => {
+                  const event = new CustomEvent('import-watermark');
+                  window.dispatchEvent(event);
+                }} 
+                style={{ width: '100%', marginBottom: '8px', color: '#000000' }}
+              >
+                💧 Import Watermark Image
+              </button>
+              <button 
+                className="quality-btn" 
+                onClick={() => {
+                  const event = new CustomEvent('import-signature');
+                  window.dispatchEvent(event);
+                }} 
+                style={{ width: '100%', marginBottom: '8px', color: '#000000' }}
+              >
+                ✍️ Import Signature Image
+              </button>
+              <button 
+                className="quality-btn" 
+                onClick={() => {
+                  const event = new CustomEvent('import-border');
+                  window.dispatchEvent(event);
+                }} 
+                style={{ width: '100%', marginBottom: '8px', color: '#000000' }}
+              >
+                🖼️ Import Border Pattern
+              </button>
+            </div>
+
+            <div className="control-section">
+              <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>⚙️ Opacity Controls</h4>
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ color: '#666', fontSize: '12px', display: 'block', marginBottom: '4px' }}>
+                  💧 Watermark Opacity
+                </label>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  defaultValue="70"
+                  onChange={(e) => {
+                    const event = new CustomEvent('watermark-opacity-change', { detail: { value: e.target.value } });
+                    window.dispatchEvent(event);
+                  }}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ color: '#666', fontSize: '12px', display: 'block', marginBottom: '4px' }}>
+                  ✍️ Signature Opacity
+                </label>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  defaultValue="80"
+                  onChange={(e) => {
+                    const event = new CustomEvent('signature-opacity-change', { detail: { value: e.target.value } });
+                    window.dispatchEvent(event);
+                  }}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+
+            <div className="control-section">
               <h4 style={{ color: '#000000', margin: '15px 0 10px 0', fontSize: '14px' }}>👁️ Preview & Save</h4>
               <button className="quality-btn" onClick={onShowPreview} style={{ 
                 width: '100%', 
@@ -351,20 +421,36 @@ const QualityPanel: React.FC<Props> = ({
                 💾 Apply to All Images
               </button>
               <button
-                                onClick={() => {
-                                  const loadFunction = (window as any).loadSavedAdjustments;
-                                  if (loadFunction) loadFunction(true);
-                                }}
-                                className="quality-btn"
-                                style={{
-                                    width: '100%',
-                                    marginBottom: '8px',
-                                    background: '#4CAF50',
-                                    color: 'white'
-                                }}
-                            >
-                                📥 Load Saved Settings
-                            </button>
+                onClick={() => {
+                  const loadFunction = (window as any).loadSavedAdjustments;
+                  if (loadFunction) loadFunction(true);
+                }}
+                className="quality-btn"
+                style={{
+                  width: '100%',
+                  marginBottom: '8px',
+                  background: '#4CAF50',
+                  color: 'white'
+                }}
+              >
+                📥 Load Saved Settings
+              </button>
+              <button
+                onClick={() => {
+                  const event = new CustomEvent('reset-all-effects');
+                  window.dispatchEvent(event);
+                }}
+                className="quality-btn"
+                style={{
+                  width: '100%',
+                  marginBottom: '8px',
+                  background: '#dc3545',
+                  color: 'white',
+                  fontWeight: 'bold'
+                }}
+              >
+                🔄 Reset All Effects
+              </button>
             </div>
 
             <div className="control-section">
