@@ -264,7 +264,6 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                             </div>
                         </div>
                     </div>
-
                     {/* Keyboard Shortcuts Section */}
                     <div style={{
                         flex: "1",
@@ -559,7 +558,7 @@ function Main({ appName, aboutText } :any) {
     const [croppedImages, setCroppedImages] = useState<any>({});
     const [gridView, setGridView] = useState(true);
     const [currentView, setCurrentView] = useState<'crop' | 'history'>('crop');
-    const [activeControl, setActiveControl] = useState<string>(''); // 'watermark', 'signature', 'border', or ''
+    const [activeControl, setActiveControl] = useState<string>(''); // 'watermark', 'signature', or ''
 
     // State for floating images and zoom functionality
     const [floatingImages, setFloatingImages] = useState<{ [key: number]: { position: { x: number, y: number }, size: { width: number, height: number }, visible: boolean } }>({});
@@ -3854,6 +3853,7 @@ const generateFallbackPreview = () => {
                                         ✕
                                     </div>
                                 </div>
+                                )
                             )}
 
                             {/* Draggable and Resizable Signature Overlay */}
