@@ -21,6 +21,10 @@ args = "Educational File Server"
 task = "workflow.run"
 args = "display_alpha_file"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "React Development Server"
+
 [[workflows.workflow]]
 name = "Educational File Server"
 author = "agent"
@@ -37,6 +41,22 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cat alpha.txt"
+
+[[workflows.workflow]]
+name = "React Development Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm start"
+waitForPort = 3000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
 
 [[ports]]
 localPort = 5000

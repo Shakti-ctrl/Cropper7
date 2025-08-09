@@ -80,8 +80,8 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
     return (
         <div style={{ 
             display: "flex", 
-            height: "calc(100vh - 200px)",
-            maxHeight: "600px",
+            height: "auto",
+            minHeight: "400px",
             gap: "30px", 
             alignItems: "center",
             justifyContent: "center",
@@ -93,9 +93,9 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                 flex: 1,
                 display: "flex", 
                 flexDirection: "column", 
-                gap: "15px", 
+                gap: "20px", 
                 alignItems: "center",
-                maxWidth: "500px",
+                maxWidth: "600px",
                 height: "100%",
                 justifyContent: "center"
             }}>
@@ -106,7 +106,7 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
                         backgroundClip: 'text',
-                        fontSize: '2.2em',
+                        fontSize: '2.6em',
                         textShadow: '0 0 30px rgba(0, 255, 255, 0.5)',
                         cursor: 'pointer',
                         transition: 'all 0.3s ease',
@@ -117,7 +117,7 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                 <h2 onClick={onSelectFolder}
                     className="select-some-files"
                     style={{
-                        fontSize: "1.3em", 
+                        fontSize: "1.6em", 
                         margin: "0",
                         color: '#00bfff',
                         textShadow: '0 0 15px rgba(0, 191, 255, 0.5)',
@@ -128,12 +128,12 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
 
                 <div style={{
                     background: "linear-gradient(135deg, rgba(0, 20, 40, 0.9), rgba(0, 40, 80, 0.8))",
-                    padding: "15px",
-                    borderRadius: "12px",
+                    padding: "20px",
+                    borderRadius: "15px",
                     border: "2px solid rgba(0, 255, 255, 0.3)",
                     boxShadow: "0 0 30px rgba(0, 255, 255, 0.2)",
                     width: "100%",
-                    maxWidth: "450px"
+                    maxWidth: "550px"
                 }}>
                     <h3 style={{
                         color: "#00ffff", 
@@ -167,7 +167,7 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
             {/* Right Side - Changing Thoughts */}
             <div style={{
                 flex: 1,
-                maxWidth: "350px",
+                maxWidth: "400px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -184,15 +184,15 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                         )
                     `,
                     border: '3px solid rgba(0, 255, 255, 0.4)',
-                    borderRadius: '18px',
-                    padding: '25px',
+                    borderRadius: '20px',
+                    padding: '30px',
                     boxShadow: `
                         0 0 40px rgba(0, 255, 255, 0.3),
                         inset 0 0 30px rgba(0, 255, 255, 0.1)
                     `,
                     position: 'relative',
                     overflow: 'hidden',
-                    height: '280px',
+                    height: '320px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
