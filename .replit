@@ -64,9 +64,6 @@ task = "shell.exec"
 args = "BROWSER=none npm start"
 waitForPort = 3000
 
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [[ports]]
 localPort = 3000
 externalPort = 3000

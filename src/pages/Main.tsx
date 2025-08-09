@@ -85,10 +85,11 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
             height: "auto",
             minHeight: "400px",
             gap: "25px", 
-            alignItems: "center",
+            alignItems: "stretch",
             justifyContent: "center",
             padding: "20px",
-            overflow: "hidden"
+            overflow: "hidden",
+            boxSizing: "border-box"
         }}>
             {/* Main Content - Single Column */}
             <div style={{
@@ -96,7 +97,7 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                 display: "flex", 
                 flexDirection: "column", 
                 gap: "25px", 
-                alignItems: "center",
+                alignItems: "stretch",
                 maxWidth: "100%",
                 justifyContent: "center"
             }}>
@@ -135,13 +136,13 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                     display: "flex",
                     gap: "25px",
                     alignItems: "stretch",
-                    justifyContent: "center",
-                    flexWrap: "wrap"
+                    justifyContent: "stretch",
+                    flexWrap: "nowrap"
                 }}>
                     {/* Inspiration Section - Now Wider */}
                     <div style={{
-                        flex: "2",
-                        minWidth: "400px",
+                        flex: "3",
+                        minWidth: "450px",
                         background: `
                             linear-gradient(135deg, 
                                 rgba(0, 40, 80, 0.9) 0%, 
@@ -267,7 +268,7 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                     {/* Keyboard Shortcuts Section */}
                     <div style={{
                         flex: "1",
-                        minWidth: "300px",
+                        minWidth: "280px",
                         background: "linear-gradient(135deg, rgba(0, 20, 40, 0.9), rgba(0, 40, 80, 0.8))",
                         padding: "25px",
                         borderRadius: "20px",

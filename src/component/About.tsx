@@ -12,7 +12,9 @@ const About = ({ aboutText, appName, children }: any) => {
       boxShadow: "0 0 40px rgba(0, 255, 255, 0.15)",
       backdropFilter: "blur(15px)",
       padding: "25px",
-      marginTop: "20px"
+      marginTop: "20px",
+      width: "100%",
+      boxSizing: "border-box"
     }}>
       <div className="app-logo" style={{
         background: "linear-gradient(135deg, rgba(0, 40, 80, 0.4), rgba(0, 20, 40, 0.6))",
