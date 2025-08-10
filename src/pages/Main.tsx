@@ -1360,14 +1360,14 @@ function Main({ appName, aboutText } :any) {
         }
     };
 
-    // Add new watermark
+    // Add new watermark - always center initially
     const addNewWatermark = () => {
         const newWatermark = {
             id: `watermark-${Date.now()}`,
             text: 'NEW WATERMARK',
             image: '',
             opacity: 70,
-            position: { x: Math.random() * 60 + 20, y: Math.random() * 60 + 20 },
+            position: { x: 50, y: 50 }, // Always center
             size: { width: 200, height: 50 },
             rotation: 0,
             fontSize: 24,
@@ -1387,14 +1387,14 @@ function Main({ appName, aboutText } :any) {
         setShowWatermarkEditor(true);
     };
 
-    // Add new signature
+    // Add new signature - always center initially
     const addNewSignature = () => {
         const newSignature = {
             id: `signature-${Date.now()}`,
             text: 'New Signature',
             image: '',
             opacity: 80,
-            position: { x: Math.random() * 60 + 20, y: Math.random() * 60 + 20 },
+            position: { x: 50, y: 50 }, // Always center
             size: { width: 150, height: 40 },
             rotation: 0,
             fontSize: 18,
@@ -1834,7 +1834,7 @@ const generateFallbackPreview = () => {
     }
 };
 
-    const applyQualityEffectsToPreview = () => {
+    const applyQualityEffectsToPreview = async () => {
         if (!qualityPreviewImage) return;
 
         const canvas = document.createElement('canvas');
@@ -1842,7 +1842,7 @@ const generateFallbackPreview = () => {
         if (!ctx) return;
 
         const img = new Image();
-        img.onload = () => {
+        img.onload = async () => {
             canvas.width = img.width;
             canvas.height = img.height;
 
@@ -1881,13 +1881,13 @@ const generateFallbackPreview = () => {
             ctx.filter = 'none';
 
             // Add watermark
-            addWatermark(canvas, ctx);
+            await addWatermark(canvas, ctx);
 
             // Add border
-            addBorder(canvas, ctx);
+            await addBorder(canvas, ctx);
 
             // Add signature
-            addSignature(canvas, ctx);
+            await addSignature(canvas, ctx);
 
             const newPreviewImage = canvas.toDataURL();
             setPreviewImage(newPreviewImage);
@@ -2060,66 +2060,15 @@ const generateFallbackPreview = () => {
     // Add event listeners for new Quality Panel functionality
     useEffect(() => {
         const handleImportWatermarkEvent = () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = (e: Event) => {
-                const target = e.target as HTMLInputElement;
-                const file = target.files?.[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const result = e.target?.result as string;
-                        setWatermarkImage(result);
-                        setEnableWatermark(true);
-                        alert('Watermark image imported! You can now drag, resize, and rotate it.');
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-            input.click();
+            importWatermarkImage();
         };
 
         const handleImportSignatureEvent = () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = (e: Event) => {
-                const target = e.target as HTMLInputElement;
-                const file = target.files?.[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const result = e.target?.result as string;
-                        setSignatureImage(result);
-                        setEnableSignature(true);
-                        alert('Signature image imported! You can now drag, resize, and rotate it.');
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-            input.click();
+            importSignatureImage();
         };
 
         const handleImportBorderEvent = () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = (e: Event) => {
-                const target = e.target as HTMLInputElement;
-                const file = target.files?.[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const result = e.target?.result as string;
-                        setBorderImage(result);
-                        setEnableBorder(true);
-                        alert('Border pattern imported! It will be used as a repeating pattern for the border.');
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-            input.click();
+            handleImportBorder();
         };
 
         const handleResetAllEffects = () => {
@@ -2198,7 +2147,7 @@ const generateFallbackPreview = () => {
             window.removeEventListener('undo-preview', handleUndoQuality);
             window.removeEventListener('redo-preview', handleRedoQuality);
         };
-    }, []);
+    }, [addNewWatermark, addNewSignature, undoQualityEffect, redoQualityEffect]);
 
     // Make function available on window object
     useEffect(() => {
@@ -2277,20 +2226,16 @@ const generateFallbackPreview = () => {
                         text: 'Check out these digitally enhanced cropped images!',
                         files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
                     });
+                    alert('📄 PDF shared successfully!');
                 } catch (shareError) {
-                    console.log('Share cancelled or failed, falling back to download');
-                    // Fallback to download
-                    const url = URL.createObjectURL(pdfBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    if (shareError.name !== 'AbortError') {
+                        console.log('Share failed:', shareError);
+                        alert(`📄 PDF generated successfully! You can share this PDF of ${indicesToShare.length} enhanced images.`);
+                    }
                 }
             } else {
-                // Show a message instead of auto-downloading
-                console.log('Web Share API not supported, PDF ready for sharing');
-                alert(`📄 PDF generated successfully! You can now share or download this PDF of ${indicesToShare.length} enhanced images.`);
+                // Just show message - no auto download
+                alert(`📄 PDF generated successfully! You can share this PDF of ${indicesToShare.length} enhanced images.`);
             }
         } catch (error) {
             console.error('Error creating PDF:', error);
@@ -4502,7 +4447,7 @@ const generateFallbackPreview = () => {
                                 </button>
                             </div>
 
-                            {/* Font Size Slider */}
+                            {/* Text Size Control */}
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
                                     📏 Text Size: {(() => {
@@ -4512,26 +4457,180 @@ const generateFallbackPreview = () => {
                                         return element?.fontSize || 18;
                                     })()}px
                                 </label>
-                                <input
-                                    type="range"
-                                    min="10"
-                                    max="80"
-                                    value={(() => {
+                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <input
+                                        type="range"
+                                        min="10"
+                                        max="80"
+                                        value={(() => {
+                                            const element = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            return element?.fontSize || 18;
+                                        })()}
+                                        onChange={(e) => {
+                                            const fontSize = parseInt(e.target.value);
+                                            if (selectedElement.type === 'watermark') {
+                                                updateWatermark(selectedElement.id!, { fontSize });
+                                            } else {
+                                                updateSignature(selectedElement.id!, { fontSize });
+                                            }
+                                        }}
+                                        style={{ flex: 1 }}
+                                    />
+                                    <input
+                                        type="number"
+                                        min="10"
+                                        max="80"
+                                        value={(() => {
+                                            const element = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            return element?.fontSize || 18;
+                                        })()}
+                                        onChange={(e) => {
+                                            const fontSize = Math.max(10, Math.min(80, parseInt(e.target.value) || 18));
+                                            if (selectedElement.type === 'watermark') {
+                                                updateWatermark(selectedElement.id!, { fontSize });
+                                            } else {
+                                                updateSignature(selectedElement.id!, { fontSize });
+                                            }
+                                        }}
+                                        style={{ width: '60px', padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Image Size Control */}
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
+                                    🖼️ Image Width: {(() => {
                                         const element = selectedElement.type === 'watermark' 
                                             ? watermarks.find(w => w.id === selectedElement.id)
                                             : signatures.find(s => s.id === selectedElement.id);
-                                        return element?.fontSize || 18;
-                                    })()}
-                                    onChange={(e) => {
-                                        const fontSize = parseInt(e.target.value);
-                                        if (selectedElement.type === 'watermark') {
-                                            updateWatermark(selectedElement.id!, { fontSize });
-                                        } else {
-                                            updateSignature(selectedElement.id!, { fontSize });
-                                        }
-                                    }}
-                                    style={{ width: '100%', marginBottom: '5px' }}
-                                />
+                                        return element?.size.width || 150;
+                                    })()}px
+                                </label>
+                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <input
+                                        type="range"
+                                        min="50"
+                                        max="400"
+                                        value={(() => {
+                                            const element = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            return element?.size.width || 150;
+                                        })()}
+                                        onChange={(e) => {
+                                            const width = parseInt(e.target.value);
+                                            const currentElement = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            if (currentElement) {
+                                                const newSize = { ...currentElement.size, width };
+                                                if (selectedElement.type === 'watermark') {
+                                                    updateWatermark(selectedElement.id!, { size: newSize });
+                                                } else {
+                                                    updateSignature(selectedElement.id!, { size: newSize });
+                                                }
+                                            }
+                                        }}
+                                        style={{ flex: 1 }}
+                                    />
+                                    <input
+                                        type="number"
+                                        min="50"
+                                        max="400"
+                                        value={(() => {
+                                            const element = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            return element?.size.width || 150;
+                                        })()}
+                                        onChange={(e) => {
+                                            const width = Math.max(50, Math.min(400, parseInt(e.target.value) || 150));
+                                            const currentElement = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            if (currentElement) {
+                                                const newSize = { ...currentElement.size, width };
+                                                if (selectedElement.type === 'watermark') {
+                                                    updateWatermark(selectedElement.id!, { size: newSize });
+                                                } else {
+                                                    updateSignature(selectedElement.id!, { size: newSize });
+                                                }
+                                            }
+                                        }}
+                                        style={{ width: '70px', padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Image Height Control */}
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
+                                    📐 Image Height: {(() => {
+                                        const element = selectedElement.type === 'watermark' 
+                                            ? watermarks.find(w => w.id === selectedElement.id)
+                                            : signatures.find(s => s.id === selectedElement.id);
+                                        return element?.size.height || 50;
+                                    })()}px
+                                </label>
+                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <input
+                                        type="range"
+                                        min="30"
+                                        max="200"
+                                        value={(() => {
+                                            const element = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            return element?.size.height || 50;
+                                        })()}
+                                        onChange={(e) => {
+                                            const height = parseInt(e.target.value);
+                                            const currentElement = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            if (currentElement) {
+                                                const newSize = { ...currentElement.size, height };
+                                                if (selectedElement.type === 'watermark') {
+                                                    updateWatermark(selectedElement.id!, { size: newSize });
+                                                } else {
+                                                    updateSignature(selectedElement.id!, { size: newSize });
+                                                }
+                                            }
+                                        }}
+                                        style={{ flex: 1 }}
+                                    />
+                                    <input
+                                        type="number"
+                                        min="30"
+                                        max="200"
+                                        value={(() => {
+                                            const element = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            return element?.size.height || 50;
+                                        })()}
+                                        onChange={(e) => {
+                                            const height = Math.max(30, Math.min(200, parseInt(e.target.value) || 50));
+                                            const currentElement = selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)
+                                                : signatures.find(s => s.id === selectedElement.id);
+                                            if (currentElement) {
+                                                const newSize = { ...currentElement.size, height };
+                                                if (selectedElement.type === 'watermark') {
+                                                    updateWatermark(selectedElement.id!, { size: newSize });
+                                                } else {
+                                                    updateSignature(selectedElement.id!, { size: newSize });
+                                                }
+                                            }
+                                        }}
+                                        style={{ width: '70px', padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }}
+                                    />
+                                </div>
                             </div>
 
                             {/* Rotation Clock Control */}
@@ -4761,7 +4860,7 @@ const generateFallbackPreview = () => {
                                     ↶ Undo
                                 </button>
 
-                                {/* Opacity Slider */}
+                                {/* Opacity Control */}
                                 <div style={{ gridColumn: '1 / -1' }}>
                                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
                                         💧 Opacity: {(() => {
@@ -4771,26 +4870,48 @@ const generateFallbackPreview = () => {
                                             return element?.opacity || 100;
                                         })()}%
                                     </label>
-                                    <input
-                                        type="range"
-                                        min="10"
-                                        max="100"
-                                        value={(() => {
-                                            const element = selectedElement.type === 'watermark' 
-                                                ? watermarks.find(w => w.id === selectedElement.id)
-                                                : signatures.find(s => s.id === selectedElement.id);
-                                            return element?.opacity || 100;
-                                        })()}
-                                        onChange={(e) => {
-                                            const opacity = parseInt(e.target.value);
-                                            if (selectedElement.type === 'watermark') {
-                                                updateWatermark(selectedElement.id!, { opacity });
-                                            } else {
-                                                updateSignature(selectedElement.id!, { opacity });
-                                            }
-                                        }}
-                                        style={{ width: '100%' }}
-                                    />
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                        <input
+                                            type="range"
+                                            min="10"
+                                            max="100"
+                                            value={(() => {
+                                                const element = selectedElement.type === 'watermark' 
+                                                    ? watermarks.find(w => w.id === selectedElement.id)
+                                                    : signatures.find(s => s.id === selectedElement.id);
+                                                return element?.opacity || 100;
+                                            })()}
+                                            onChange={(e) => {
+                                                const opacity = parseInt(e.target.value);
+                                                if (selectedElement.type === 'watermark') {
+                                                    updateWatermark(selectedElement.id!, { opacity });
+                                                } else {
+                                                    updateSignature(selectedElement.id!, { opacity });
+                                                }
+                                            }}
+                                            style={{ flex: 1 }}
+                                        />
+                                        <input
+                                            type="number"
+                                            min="10"
+                                            max="100"
+                                            value={(() => {
+                                                const element = selectedElement.type === 'watermark' 
+                                                    ? watermarks.find(w => w.id === selectedElement.id)
+                                                    : signatures.find(s => s.id === selectedElement.id);
+                                                return element?.opacity || 100;
+                                            })()}
+                                            onChange={(e) => {
+                                                const opacity = Math.max(10, Math.min(100, parseInt(e.target.value) || 100));
+                                                if (selectedElement.type === 'watermark') {
+                                                    updateWatermark(selectedElement.id!, { opacity });
+                                                } else {
+                                                    updateSignature(selectedElement.id!, { opacity });
+                                                }
+                                            }}
+                                            style={{ width: '60px', padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
