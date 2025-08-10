@@ -1,0 +1,60 @@
+Compiled with problems:X
+
+ERROR in src/pages/Main.tsx:2150:43
+
+TS2448: Block-scoped variable 'undoQualityEffect' used before its declaration.
+    2148 |             window.removeEventListener('redo-preview', handleRedoQuality);
+    2149 |         };
+  > 2150 |     }, [addNewWatermark, addNewSignature, undoQualityEffect, redoQualityEffect]);
+         |                                           ^^^^^^^^^^^^^^^^^
+    2151 |
+    2152 |     // Make function available on window object
+    2153 |     useEffect(() => {
+
+
+ERROR in src/pages/Main.tsx:2150:43
+
+TS2454: Variable 'undoQualityEffect' is used before being assigned.
+    2148 |             window.removeEventListener('redo-preview', handleRedoQuality);
+    2149 |         };
+  > 2150 |     }, [addNewWatermark, addNewSignature, undoQualityEffect, redoQualityEffect]);
+         |                                           ^^^^^^^^^^^^^^^^^
+    2151 |
+    2152 |     // Make function available on window object
+    2153 |     useEffect(() => {
+
+
+ERROR in src/pages/Main.tsx:2150:62
+
+TS2448: Block-scoped variable 'redoQualityEffect' used before its declaration.
+    2148 |             window.removeEventListener('redo-preview', handleRedoQuality);
+    2149 |         };
+  > 2150 |     }, [addNewWatermark, addNewSignature, undoQualityEffect, redoQualityEffect]);
+         |                                                              ^^^^^^^^^^^^^^^^^
+    2151 |
+    2152 |     // Make function available on window object
+    2153 |     useEffect(() => {
+
+
+ERROR in src/pages/Main.tsx:2150:62
+
+TS2454: Variable 'redoQualityEffect' is used before being assigned.
+    2148 |             window.removeEventListener('redo-preview', handleRedoQuality);
+    2149 |         };
+  > 2150 |     }, [addNewWatermark, addNewSignature, undoQualityEffect, redoQualityEffect]);
+         |                                                              ^^^^^^^^^^^^^^^^^
+    2151 |
+    2152 |     // Make function available on window object
+    2153 |     useEffect(() => {
+
+
+ERROR in src/pages/Main.tsx:2231:25
+
+TS2571: Object is of type 'unknown'.
+    2229 |                     alert('📄 PDF shared successfully!');
+    2230 |                 } catch (shareError) {
+  > 2231 |                     if (shareError.name !== 'AbortError') {
+         |                         ^^^^^^^^^^
+    2232 |                         console.log('Share failed:', shareError);
+    2233 |                         alert(`📄 PDF generated successfully! You can share this PDF of ${indicesToShare.length} enhanced images.`);
+    2234 |                     }
