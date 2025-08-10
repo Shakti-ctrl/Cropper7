@@ -14,6 +14,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (August 2025)
 
+### PDF Generation and Image Processing Fixes (Latest)
+- **Fixed Async Image Loading**: Resolved critical issue where watermarks and signatures weren't appearing in PDF exports due to asynchronous image loading not being properly awaited
+- **Enhanced Font Scaling**: Improved text size scaling to actually increase font size rather than just container size, with 1.5x base multiplier for better visibility
+- **Extended Font Library**: Added 20+ professional font families including serif, sans-serif, monospace, and decorative options (Arial, Times New Roman, Helvetica, Georgia, etc.)
+- **Advanced Border Styles**: Implemented support for dashed, dotted, double, and other CSS-style borders with proper rounded corner support
+- **Improved Share Button**: Removed auto-download behavior, now shows user-friendly message instead of forcing download
+- **Border Radius Support**: Fixed border radius rendering in both previews and final exports with fallback for older browsers
+
 ### Enhanced Quality Tools Features
 - **Reset Button**: Added comprehensive reset functionality that clears all applied effects, filters, adjustments, watermarks, signatures, and borders with one click
 - **Import System**: New import buttons for watermark images (PNG/JPG), signature images (PNG/JPG), and border patterns (image files used as repeating patterns)
@@ -48,9 +56,9 @@ Preferred communication style: Simple, everyday language.
 - **Batch Operations**: Optimized memory-efficient processing for 100+ images simultaneously
 - **Filter System**: 20+ professional filters organized by categories (Black & White, Vintage, Creative, Instagram-style)
 - **Quality Tools**: Comprehensive adjustment system including brightness, contrast, saturation, hue, blur, sharpen, and advanced effects
-- **Advanced Watermarking**: Support for both text and image watermarks with opacity controls (0-100%), percentage-based positioning, and drag-to-reposition functionality
-- **Enhanced Signatures**: Text and image signature support with independent opacity controls and draggable positioning on preview
-- **Smart Border System**: Configurable colored borders with adjustable width, plus support for image-based repeating border patterns
+- **Advanced Watermarking**: Support for both text and image watermarks with opacity controls (0-100%), percentage-based positioning, drag-to-reposition functionality, and proper async image loading for PDF exports
+- **Enhanced Signatures**: Text and image signature support with independent opacity controls, draggable positioning on preview, and guaranteed appearance in PDF documents
+- **Smart Border System**: Configurable colored borders with adjustable width, radius support, multiple styles (solid, dashed, dotted, double), plus image-based repeating border patterns
 - **Interactive Preview**: Floating preview window with draggable watermark and signature overlays for precise positioning
 
 ### Export and File Handling

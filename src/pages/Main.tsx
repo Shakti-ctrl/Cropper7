@@ -7,6 +7,78 @@ import AdjustmentsPanel from "../component/AdjustmentsPanel";
 import EffectFilters from "../component/EffectFilters";
 import QualityPanel from "../component/QualityPanel";
 
+// Helper function for async image loading
+const loadImageAsync = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+        img.src = src;
+    });
+};
+
+// Extended font families list
+const FONT_FAMILIES = [
+    'Arial, sans-serif',
+    'Times New Roman, serif',
+    'Helvetica, sans-serif',
+    'Georgia, serif',
+    'Verdana, sans-serif',
+    'Courier New, monospace',
+    'cursive',
+    'fantasy',
+    'Impact, sans-serif',
+    'Comic Sans MS, cursive',
+    'Trebuchet MS, sans-serif',
+    'Palatino, serif',
+    'Garamond, serif',
+    'Futura, sans-serif',
+    'Optima, sans-serif',
+    'Gill Sans, sans-serif',
+    'Baskerville, serif',
+    'Rockwell, serif',
+    'Franklin Gothic, sans-serif',
+    'Copperplate, serif'
+];
+
+// Extended border styles list
+const BORDER_STYLES = [
+    'solid',
+    'dashed',
+    'dotted',
+    'double',
+    'groove',
+    'ridge',
+    'inset',
+    'outset'
+];
+
+// Helper function for drawing rounded rectangles
+const drawRoundedRect = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number
+) => {
+    ctx.beginPath();
+    
+    // Fallback for older browsers that don't support roundRect
+    if (typeof (ctx as any).roundRect === 'function') {
+        (ctx as any).roundRect(x, y, width, height, radius);
+    } else {
+        // Manual rounded rectangle implementation
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + width, y, x + width, y + height, radius);
+        ctx.arcTo(x + width, y + height, x, y + height, radius);
+        ctx.arcTo(x, y + height, x, y, radius);
+        ctx.arcTo(x, y, x + width, y, radius);
+    }
+    
+    ctx.closePath();
+};
+
 
 const cropSizePresets = [
     {name: "Custom", value: null},
@@ -644,7 +716,7 @@ function Main({ appName, aboutText } :any) {
         size: { width: 200, height: 50 },
         rotation: 0,
         fontSize: 24,
-        fontFamily: 'Arial',
+        fontFamily: 'Arial, sans-serif',
         isBold: false,
         isItalic: false,
         textAlign: 'center',
@@ -1037,12 +1109,12 @@ function Main({ appName, aboutText } :any) {
     };
 
     // Watermark, Border, Signature apply functions
-    const addWatermark = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
+    const addWatermark = async (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableWatermark) return;
 
         // Apply all watermarks
-        watermarks.forEach((watermark) => {
-            if (!watermark.text?.trim() && !watermark.image) return;
+        for (const watermark of watermarks) {
+            if (!watermark.text?.trim() && !watermark.image) continue;
 
             const centerX = (watermark.position.x / 100) * canvas.width;
             const centerY = (watermark.position.y / 100) * canvas.height;
@@ -1053,14 +1125,12 @@ function Main({ appName, aboutText } :any) {
             ctx.globalAlpha = watermark.opacity / 100;
 
             if (watermark.image) {
-                const img = new Image();
-                img.onload = () => {
+                try {
+                    const img = await loadImageAsync(watermark.image);
                     ctx.drawImage(img, -watermark.size.width / 2, -watermark.size.height / 2, watermark.size.width, watermark.size.height);
-                };
-                img.onerror = () => {
-                    console.error("Failed to load watermark image");
-                };
-                img.src = watermark.image;
+                } catch (error) {
+                    console.error("Failed to load watermark image:", error);
+                }
             } else if (watermark.text?.trim()) {
                 const scaledFontSize = Math.max(canvas.width / 800 * watermark.fontSize, 12);
                 const fontWeight = watermark.isBold ? 'bold' : 'normal';
@@ -1082,7 +1152,7 @@ function Main({ appName, aboutText } :any) {
                 ctx.fillText(watermark.text, 0, 0);
             }
             ctx.restore();
-        });
+        }
 
         // Backward compatibility - apply legacy watermark if exists
         if ((watermarkText?.trim() || watermarkImage) && watermarks.length === 1) {
@@ -1095,16 +1165,16 @@ function Main({ appName, aboutText } :any) {
             ctx.globalAlpha = watermarkOpacity / 100;
 
             if (watermarkImage) {
-                const img = new Image();
-                img.onload = () => {
+                try {
+                    const img = await loadImageAsync(watermarkImage);
                     ctx.drawImage(img, -watermarkSize.width / 2, -watermarkSize.height / 2, watermarkSize.width, watermarkSize.height);
-                };
-                img.onerror = () => {
-                    console.error("Failed to load watermark image");
-                };
-                img.src = watermarkImage;
+                } catch (error) {
+                    console.error("Failed to load legacy watermark image:", error);
+                }
             } else if (watermarkText?.trim()) {
-                const scaledFontSize = Math.max(canvas.width / 800 * watermarkFontSize, 12);
+                // Enhanced font scaling for better visibility on large canvases  
+                const baseFontSize = watermarkFontSize * 1.5; // Increase base font size multiplier
+                const scaledFontSize = Math.max(canvas.width / 600 * baseFontSize, watermarkFontSize);
                 const fontWeight = watermarkIsBold ? 'bold' : 'normal';
                 const fontStyle = watermarkIsItalic ? 'italic' : 'normal';
 
@@ -1127,39 +1197,80 @@ function Main({ appName, aboutText } :any) {
         }
     };
 
-    const addBorder = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
+    const addBorder = async (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableBorder || borderWidth <= 0) return;
 
         ctx.save();
         ctx.lineWidth = borderWidth;
+        
+        const x = borderWidth / 2;
+        const y = borderWidth / 2;
+        const width = canvas.width - borderWidth;
+        const height = canvas.height - borderWidth;
+        const radius = borderRadius || 0;
+
         if (borderImage) {
-            const img = new Image();
-            img.onload = () => {
+            try {
+                const img = await loadImageAsync(borderImage);
                 const pattern = ctx.createPattern(img, 'repeat');
                 if (pattern) {
                     ctx.strokeStyle = pattern;
-                    ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
+                    if (radius > 0) {
+                        drawRoundedRect(ctx, x, y, width, height, radius);
+                        ctx.stroke();
+                    } else {
+                        ctx.strokeRect(x, y, width, height);
+                    }
                 }
-                ctx.restore();
-            };
-            img.onerror = () => {
-                console.error("Failed to load border image");
-                ctx.restore();
-            };
-            img.src = borderImage;
+            } catch (error) {
+                console.error("Failed to load border image:", error);
+            }
         } else {
             ctx.strokeStyle = borderColor;
-            ctx.strokeRect(borderWidth / 2, borderWidth / 2, canvas.width - borderWidth, canvas.height - borderWidth);
-            ctx.restore();
+            
+            // Apply border style effects
+            if (borderStyle === 'dashed') {
+                ctx.setLineDash([borderWidth * 2, borderWidth]);
+            } else if (borderStyle === 'dotted') {
+                ctx.setLineDash([borderWidth, borderWidth]);
+            } else if (borderStyle === 'double') {
+                // Draw double border
+                ctx.lineWidth = borderWidth / 3;
+                if (radius > 0) {
+                    drawRoundedRect(ctx, x, y, width, height, radius);
+                    ctx.stroke();
+                    drawRoundedRect(ctx, x + borderWidth * 0.66, y + borderWidth * 0.66, 
+                                  width - borderWidth * 1.33, height - borderWidth * 1.33, 
+                                  Math.max(0, radius - borderWidth * 0.66));
+                    ctx.stroke();
+                } else {
+                    ctx.strokeRect(x, y, width, height);
+                    ctx.strokeRect(x + borderWidth * 0.66, y + borderWidth * 0.66, 
+                                 width - borderWidth * 1.33, height - borderWidth * 1.33);
+                }
+                ctx.restore();
+                return;
+            }
+            
+            if (radius > 0) {
+                drawRoundedRect(ctx, x, y, width, height, radius);
+                ctx.stroke();
+            } else {
+                ctx.strokeRect(x, y, width, height);
+            }
+            
+            // Reset line dash for other elements
+            ctx.setLineDash([]);
         }
+        ctx.restore();
     };
 
-    const addSignature = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
+    const addSignature = async (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
         if (!enableSignature) return;
 
         // Apply all signatures
-        signatures.forEach((signature) => {
-            if (!signature.text?.trim() && !signature.image) return;
+        for (const signature of signatures) {
+            if (!signature.text?.trim() && !signature.image) continue;
 
             const centerX = (signature.position.x / 100) * canvas.width;
             const centerY = (signature.position.y / 100) * canvas.height;
@@ -1170,16 +1281,16 @@ function Main({ appName, aboutText } :any) {
             ctx.globalAlpha = signature.opacity / 100;
 
             if (signature.image) {
-                const img = new Image();
-                img.onload = () => {
+                try {
+                    const img = await loadImageAsync(signature.image);
                     ctx.drawImage(img, -signature.size.width / 2, -signature.size.height / 2, signature.size.width, signature.size.height);
-                };
-                img.onerror = () => {
-                    console.error("Failed to load signature image");
-                };
-                img.src = signature.image;
+                } catch (error) {
+                    console.error("Failed to load signature image:", error);
+                }
             } else if (signature.text?.trim()) {
-                const scaledFontSize = Math.max(canvas.width / 800 * signature.fontSize, 10);
+                // Enhanced font scaling for better visibility on large canvases
+                const baseFontSize = signature.fontSize * 1.5; // Increase base font size multiplier
+                const scaledFontSize = Math.max(canvas.width / 600 * baseFontSize, signature.fontSize);
                 const fontWeight = signature.isBold ? 'bold' : 'normal';
                 const fontStyle = signature.isItalic ? 'italic' : 'normal';
 
@@ -1199,7 +1310,7 @@ function Main({ appName, aboutText } :any) {
                 ctx.fillText(signature.text, 0, 0);
             }
             ctx.restore();
-        });
+        }
 
         // Backward compatibility - apply legacy signature if exists
         if ((signatureText?.trim() || signatureImage) && signatures.length === 1) {
@@ -1212,16 +1323,16 @@ function Main({ appName, aboutText } :any) {
             ctx.globalAlpha = signatureOpacity / 100;
 
             if (signatureImage) {
-                const img = new Image();
-                img.onload = () => {
+                try {
+                    const img = await loadImageAsync(signatureImage);
                     ctx.drawImage(img, -signatureSize.width / 2, -signatureSize.height / 2, signatureSize.width, signatureSize.height);
-                };
-                img.onerror = () => {
-                    console.error("Failed to load signature image");
-                };
-                img.src = signatureImage;
+                } catch (error) {
+                    console.error("Failed to load legacy signature image:", error);
+                }
             } else if (signatureText?.trim()) {
-                const scaledFontSize = Math.max(canvas.width / 800 * signatureFontSize, 10);
+                // Enhanced font scaling for better visibility on large canvases
+                const baseFontSize = signatureFontSize * 1.5; // Increase base font size multiplier
+                const scaledFontSize = Math.max(canvas.width / 600 * baseFontSize, signatureFontSize);
                 const fontWeight = signatureIsBold ? 'bold' : 'normal';
                 const fontStyle = signatureIsItalic ? 'italic' : 'normal';
 
@@ -1255,7 +1366,7 @@ function Main({ appName, aboutText } :any) {
             size: { width: 200, height: 50 },
             rotation: 0,
             fontSize: 24,
-            fontFamily: 'Arial',
+            fontFamily: 'Arial, sans-serif',
             isBold: false,
             isItalic: false,
             textAlign: 'center',
@@ -1583,7 +1694,7 @@ function Main({ appName, aboutText } :any) {
         input.click();
     };
 
-    const handleShowPreview = () => {
+    const handleShowPreview = async () => {
         if (files.length > 0) {
             // Generate a preview with the first image
             const firstImageFile = files[0];
@@ -1592,7 +1703,7 @@ function Main({ appName, aboutText } :any) {
             if (!ctx) return;
 
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 canvas.width = img.width;
                 canvas.height = img.height;
 
@@ -1631,13 +1742,13 @@ function Main({ appName, aboutText } :any) {
                 ctx.filter = 'none';
 
                 // Add watermark
-                addWatermark(canvas, ctx);
+                await addWatermark(canvas, ctx);
 
                 // Add border
-                addBorder(canvas, ctx);
+                await addBorder(canvas, ctx);
 
                 // Add signature
-                addSignature(canvas, ctx);
+                await addSignature(canvas, ctx);
 
                 setPreviewImage(canvas.toDataURL());
                 setShowPreviewPopup(true);
@@ -1651,7 +1762,7 @@ function Main({ appName, aboutText } :any) {
         }
     };
 
-    const generateQualityPreview = () => {
+    const generateQualityPreview = async () => {
     // Use the first cropped image if available, otherwise load original or sample
     const firstCropKey = Object.keys(crops).find(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height);
 
@@ -1659,7 +1770,7 @@ function Main({ appName, aboutText } :any) {
         // Generate cropped image for preview with effects applied
         const crop = crops[parseInt(firstCropKey)];
         try {
-            const enhancedImage = generateEnhancedCroppedImage(crop, parseInt(firstCropKey));
+            const enhancedImage = await generateEnhancedCroppedImage(crop, parseInt(firstCropKey));
             if (enhancedImage && enhancedImage.dataUrl) {
                 setPreviewImage(enhancedImage.dataUrl);
                 setQualityPreviewImage(enhancedImage.dataUrl);
@@ -1841,7 +1952,7 @@ const generateFallbackPreview = () => {
     };
 
     // Save adjustments function
-    const handleSaveAdjustments = (applyToAll = false) => {
+    const handleSaveAdjustments = async (applyToAll = false) => {
         const settings = {
             selectedFilter,
             adjustmentValues,
@@ -1872,11 +1983,11 @@ const generateFallbackPreview = () => {
             setOriginalCroppedImages({ ...croppedImages });
 
             // Apply effects to all cropped images
-            Object.keys(crops).forEach(key => {
+            for (const key of Object.keys(crops)) {
                 const index = parseInt(key);
                 const crop = crops[index];
                 if (crop && crop.width && crop.height) {
-                    const enhancedImage = generateEnhancedCroppedImage(crop, index);
+                    const enhancedImage = await generateEnhancedCroppedImage(crop, index);
                     if (enhancedImage.dataUrl) {
                         setCroppedImages((prev: any) => ({
                             ...prev,
@@ -1884,7 +1995,7 @@ const generateFallbackPreview = () => {
                         }));
                     }
                 }
-            });
+            }
 
             alert('✅ Quality settings applied to all images!');
         } else {
@@ -2112,7 +2223,7 @@ const generateFallbackPreview = () => {
                 isFirstPage = false;
 
                 // Generate image with all quality effects applied - consistent with preview
-                const enhancedImage = generateEnhancedCroppedImage(crop, index);
+                const enhancedImage = await generateEnhancedCroppedImage(crop, index);
 
                 if (!enhancedImage.dataUrl) {
                     console.warn(`Skipping image ${index} - no data available`);
@@ -2168,14 +2279,9 @@ const generateFallbackPreview = () => {
                     URL.revokeObjectURL(url);
                 }
             } else {
-                // Fallback: create download link
-                const url = URL.createObjectURL(pdfBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
-                URL.revokeObjectURL(url);
-                alert(`📄 PDF saved as: ${filename}`);
+                // Show a message instead of auto-downloading
+                console.log('Web Share API not supported, PDF ready for sharing');
+                alert(`📄 PDF generated successfully! You can now share or download this PDF of ${indicesToShare.length} enhanced images.`);
             }
         } catch (error) {
             console.error('Error creating PDF:', error);
@@ -2230,7 +2336,7 @@ const generateFallbackPreview = () => {
     };
 
     // Enhanced version that applies all effects consistently
-    const generateEnhancedCroppedImage = (crop: any, index: number) => {
+    const generateEnhancedCroppedImage = async (crop: any, index: number) => {
         try {
             const resizeImageToCrop = resizeOnExport && cropSize != null && cropSize.width === cropSize.height ? cropSize : crop;
             const image = crop?.image;
@@ -2323,13 +2429,13 @@ const generateFallbackPreview = () => {
             ctx.filter = 'none';
 
             // Add watermark
-            addWatermark(canvas, ctx);
+            await addWatermark(canvas, ctx);
 
             // Add border
-            addBorder(canvas, ctx);
+            await addBorder(canvas, ctx);
 
             // Add signature
-            addSignature(canvas, ctx);
+            await addSignature(canvas, ctx);
 
             return {
                 canvas,
@@ -2346,13 +2452,13 @@ const generateFallbackPreview = () => {
         }
     };
 
-    const onSaveCropped = () => {
+    const onSaveCropped = async () => {
         const indicesToSave = selectedFiles.size > 0 ? Array.from(selectedFiles) : Object.keys(crops).map(Number);
 
-        indicesToSave.forEach((index: number) => {
+        for (const index of indicesToSave) {
             const crop = crops[index];
             if (crop) {
-                const croppedImage = generateEnhancedCroppedImage(crop, index);
+                const croppedImage = await generateEnhancedCroppedImage(crop, index);
                 if (croppedImage.canvas && croppedImage.dataUrl) {
                     const link = document.createElement('a');
                     link.download = croppedImage.filename;
@@ -2362,7 +2468,7 @@ const generateFallbackPreview = () => {
                     console.warn(`Skipping image ${index} due to invalid data`);
                 }
             }
-        });
+        }
     };
 
     const onSaveAsZip = async () => {
@@ -2390,7 +2496,7 @@ const generateFallbackPreview = () => {
                 const crop = crops[index];
                 if (crop) {
                     try {
-                        const croppedImage = generateEnhancedCroppedImage(crop, index);
+                        const croppedImage = await generateEnhancedCroppedImage(crop, index);
                         if (!croppedImage.canvas || !croppedImage.dataUrl) {
                             console.warn(`Skipping image ${index} due to invalid data`);
                             continue;
@@ -2476,7 +2582,7 @@ const generateFallbackPreview = () => {
                     }
                     isFirstPage = false;
 
-                    const croppedImage = generateEnhancedCroppedImage(crop, index);
+                    const croppedImage = await generateEnhancedCroppedImage(crop, index);
                     if (!croppedImage.canvas) {
                         console.warn(`Skipping image ${index} due to invalid data`);
                         continue;
@@ -2745,7 +2851,7 @@ const generateFallbackPreview = () => {
     };
 
     // Navigation functions for floating preview
-    const goToNextPreviewImage = () => {
+    const goToNextPreviewImage = async () => {
         const croppedImageKeys = Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height);
         if (croppedImageKeys.length === 0) return;
 
@@ -2759,7 +2865,7 @@ const generateFallbackPreview = () => {
         const crop = crops[nextImageIndex];
         if (crop) {
             try {
-                const enhancedImage = generateEnhancedCroppedImage(crop, nextImageIndex);
+                const enhancedImage = await generateEnhancedCroppedImage(crop, nextImageIndex);
                 if (enhancedImage && enhancedImage.dataUrl) {
                     setPreviewImage(enhancedImage.dataUrl);
                     setQualityPreviewImage(enhancedImage.dataUrl);
@@ -2773,7 +2879,7 @@ const generateFallbackPreview = () => {
         }
     };
 
-    const goToPrevPreviewImage = () => {
+    const goToPrevPreviewImage = async () => {
         const croppedImageKeys = Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height);
         if (croppedImageKeys.length === 0) return;
 
@@ -2787,7 +2893,7 @@ const generateFallbackPreview = () => {
         const crop = crops[prevImageIndex];
         if (crop) {
             try {
-                const enhancedImage = generateEnhancedCroppedImage(crop, prevImageIndex);
+                const enhancedImage = await generateEnhancedCroppedImage(crop, prevImageIndex);
                 if (enhancedImage && enhancedImage.dataUrl) {
                     setPreviewImage(enhancedImage.dataUrl);
                     setQualityPreviewImage(enhancedImage.dataUrl);
