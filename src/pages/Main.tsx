@@ -682,14 +682,6 @@ function Main({ appName, aboutText } :any) {
     const [activeElement, setActiveElement] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
     const [selectedElementForEdit, setSelectedElementForEdit] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
 
-    // New floating control panel system
-    const [showFloatingControls, setShowFloatingControls] = useState<boolean>(false);
-    const [controlsPosition, setControlsPosition] = useState({ x: 50, y: 20 });
-    const [controlsSize, setControlsSize] = useState({ width: 400, height: 120 });
-    const [selectedElement, setSelectedElement] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
-    const [moveMode, setMoveMode] = useState<boolean>(false);
-    const [elementHistory, setElementHistory] = useState<{ [key: string]: any[] }>({});
-
     // Backward compatibility states
     const [watermarkOpacity, setWatermarkOpacity] = useState<number>(70);
     const [signatureOpacity, setSignatureOpacity] = useState<number>(80);
@@ -1316,110 +1308,6 @@ function Main({ appName, aboutText } :any) {
     // Update signature
     const updateSignature = (id: string, updates: Partial<typeof signatures[0]>) => {
         setSignatures(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
-    };
-
-    // Floating Control Panel Helper Functions
-    const saveElementState = (type: 'watermark' | 'signature', id: string) => {
-        const element = type === 'watermark' 
-            ? watermarks.find(w => w.id === id)
-            : signatures.find(s => s.id === id);
-        
-        if (element) {
-            const key = `${type}-${id}`;
-            setElementHistory(prev => ({
-                ...prev,
-                [key]: [...(prev[key] || []), JSON.parse(JSON.stringify(element))]
-            }));
-        }
-    };
-
-    const undoElementChange = () => {
-        if (!selectedElement.type || !selectedElement.id) return;
-        
-        const key = `${selectedElement.type}-${selectedElement.id}`;
-        const history = elementHistory[key];
-        
-        if (history && history.length > 1) {
-            const previousState = history[history.length - 2];
-            
-            if (selectedElement.type === 'watermark') {
-                updateWatermark(selectedElement.id, previousState);
-            } else {
-                updateSignature(selectedElement.id, previousState);
-            }
-            
-            setElementHistory(prev => ({
-                ...prev,
-                [key]: prev[key].slice(0, -1)
-            }));
-        }
-    };
-
-    const handleElementClick = (type: 'watermark' | 'signature', id: string) => {
-        // Save current state before making it active
-        saveElementState(type, id);
-        
-        setSelectedElement({ type, id });
-        setShowFloatingControls(true);
-        setMoveMode(false);
-    };
-
-    const toggleMoveMode = () => {
-        setMoveMode(!moveMode);
-    };
-
-    const handleElementResize = (value: number) => {
-        if (!selectedElement.type || !selectedElement.id) return;
-        
-        const scaleFactor = value / 100;
-        const newSize = selectedElement.type === 'watermark' 
-            ? { width: 200 * scaleFactor, height: 50 * scaleFactor }
-            : { width: 150 * scaleFactor, height: 40 * scaleFactor };
-        
-        if (selectedElement.type === 'watermark') {
-            updateWatermark(selectedElement.id, { size: newSize });
-        } else {
-            updateSignature(selectedElement.id, { size: newSize });
-        }
-    };
-
-    const handleElementRotate = (angle: number) => {
-        if (!selectedElement.type || !selectedElement.id) return;
-        
-        if (selectedElement.type === 'watermark') {
-            updateWatermark(selectedElement.id, { rotation: angle });
-        } else {
-            updateSignature(selectedElement.id, { rotation: angle });
-        }
-    };
-
-    const deleteSelectedElement = () => {
-        if (!selectedElement.type || !selectedElement.id) return;
-        
-        if (window.confirm(`Delete this ${selectedElement.type}?`)) {
-            if (selectedElement.type === 'watermark') {
-                setWatermarks(prev => prev.filter(w => w.id !== selectedElement.id));
-                if (watermarks.length === 1) setEnableWatermark(false);
-            } else {
-                setSignatures(prev => prev.filter(s => s.id !== selectedElement.id));
-                if (signatures.length === 1) setEnableSignature(false);
-            }
-            
-            setShowFloatingControls(false);
-            setSelectedElement({ type: null, id: null });
-        }
-    };
-
-    const editSelectedElement = () => {
-        if (!selectedElement.type || !selectedElement.id) return;
-        
-        if (selectedElement.type === 'watermark') {
-            setSelectedElementForEdit(selectedElement);
-            setShowWatermarkEditor(true);
-        } else {
-            setSelectedElementForEdit(selectedElement);
-            setShowSignatureEditor(true);
-        }
     };
 
     // Exported functions for QualityPanel
@@ -3802,9 +3690,11 @@ const generateFallbackPreview = () => {
                                             cursor: 'move',
                                             opacity: watermark.opacity / 100
                                         }}
-                                    onClick={() => handleElementClick('watermark', watermark.id)}
-                                    onMouseDown={moveMode && selectedElement.type === 'watermark' && selectedElement.id === watermark.id ? (e) => {
+                                    onMouseEnter={() => setActiveControl('watermark')}
+                                    onMouseLeave={() => setActiveControl('')}
+                                    onMouseDown={(e) => {
                                         if (e.target !== e.currentTarget) return;
+                                        setActiveControl('watermark');
                                         const container = e.currentTarget.parentElement!;
                                         const rect = container.getBoundingClientRect();
 
@@ -3812,11 +3702,9 @@ const generateFallbackPreview = () => {
                                             const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
                                             const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
 
-                                            updateWatermark(watermark.id, {
-                                                position: {
-                                                    x: Math.max(10, Math.min(90, x)),
-                                                    y: Math.max(10, Math.min(90, y))
-                                                }
+                                            setWatermarkPosition({
+                                                x: Math.max(10, Math.min(90, x)),
+                                                y: Math.max(10, Math.min(90, y))
                                             });
                                         };
 
@@ -3829,72 +3717,49 @@ const generateFallbackPreview = () => {
                                         document.addEventListener('mouseup', handleMouseUp);
                                         e.preventDefault();
                                         e.stopPropagation();
-                                    } : undefined}
+                                    }}
                                 >
-                                    {watermark.image ? (
-                                        <img src={watermark.image} alt="Watermark" style={{
+                                    {watermarkImage ? (
+                                        <img src={watermarkImage} alt="Watermark" style={{
                                             width: '100%',
                                             height: '100%',
                                             objectFit: 'contain',
                                             pointerEvents: 'none'
                                         }} />
                                     ) : (
-                                        <span style={{ 
-                                            fontSize: `${watermark.fontSize}px`, 
-                                            fontFamily: watermark.fontFamily,
-                                            fontWeight: watermark.isBold ? 'bold' : 'normal',
-                                            fontStyle: watermark.isItalic ? 'italic' : 'normal',
-                                            textAlign: watermark.textAlign as any,
-                                            color: watermark.textColor,
-                                            pointerEvents: 'none' 
-                                        }}>
-                                            {watermark.text || 'Watermark'}
+                                        <span style={{ fontSize: '10px', textAlign: 'center', pointerEvents: 'none' }}>
+                                            {watermarkText || 'Watermark'}
                                         </span>
                                     )}
-                                </div>
-                            )
-                        ))}
 
-                            {/* Draggable and Resizable Signature Overlays */}
-                            {enableSignature && signatures.map((signature, index) => (
-                                (signature.text || signature.image) && (
+                                    {/* Corner Resize Handles */}
                                     <div
-                                        key={signature.id}
                                         style={{
                                             position: 'absolute',
-                                            left: `${signature.position.x}%`,
-                                            top: `${signature.position.y}%`,
-                                            width: `${signature.size.width}px`,
-                                            height: `${signature.size.height}px`,
-                                            transform: `translate(-50%, -50%) rotate(${signature.rotation}deg)`,
-                                            background: selectedElement.type === 'signature' && selectedElement.id === signature.id ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
-                                            border: selectedElement.type === 'signature' && selectedElement.id === signature.id ? '2px solid #28a745' : '2px dashed rgba(0, 0, 0, 0.5)',
-                                            padding: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '12px',
-                                            color: 'rgba(0, 0, 0, 0.9)',
-                                            userSelect: 'none',
-                                            zIndex: selectedElement.type === 'signature' && selectedElement.id === signature.id ? 1001 : 999,
-                                            cursor: moveMode && selectedElement.type === 'signature' && selectedElement.id === signature.id ? 'move' : 'pointer',
-                                            opacity: signature.opacity / 100
+                                            bottom: '-6px',
+                                            right: '-6px',
+                                            width: '12px',
+                                            height: '12px',
+                                            background: '#007bff',
+                                            border: '2px solid white',
+                                            borderRadius: '2px',
+                                            cursor: 'nw-resize',
+                                            zIndex: 1002,
+                                            display: activeControl === 'watermark' ? 'block' : 'none'
                                         }}
-                                        onClick={() => handleElementClick('signature', signature.id)}
-                                        onMouseDown={moveMode && selectedElement.type === 'signature' && selectedElement.id === signature.id ? (e) => {
-                                            if (e.target !== e.currentTarget) return;
-                                            const container = e.currentTarget.parentElement!;
-                                            const rect = container.getBoundingClientRect();
+                                        title="Resize"
+                                        onMouseDown={(e) => {
+                                            const startSize = { ...watermarkSize };
+                                            const startX = e.clientX;
+                                            const startY = e.clientY;
 
                                             const handleMouseMove = (e: MouseEvent) => {
-                                                const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
-                                                const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
+                                                const deltaX = e.clientX - startX;
+                                                const deltaY = e.clientY - startY;
 
-                                                updateSignature(signature.id, {
-                                                    position: {
-                                                        x: Math.max(10, Math.min(90, x)),
-                                                        y: Math.max(10, Math.min(90, y))
-                                                    }
+                                                setWatermarkSize({
+                                                    width: Math.max(50, startSize.width + deltaX),
+                                                    height: Math.max(30, startSize.height + deltaY)
                                                 });
                                             };
 
@@ -3907,72 +3772,184 @@ const generateFallbackPreview = () => {
                                             document.addEventListener('mouseup', handleMouseUp);
                                             e.preventDefault();
                                             e.stopPropagation();
-                                        } : undefined}
-                                    >
-                                        {signature.image ? (
-                                            <img src={signature.image} alt="Signature" style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: 'contain',
-                                                pointerEvents: 'none'
-                                            }} />
-                                        ) : (
-                                            <span style={{ 
-                                                fontSize: `${signature.fontSize}px`, 
-                                                fontFamily: signature.fontFamily,
-                                                fontWeight: signature.isBold ? 'bold' : 'normal',
-                                                fontStyle: signature.isItalic ? 'italic' : 'normal',
-                                                textAlign: signature.textAlign as any,
-                                                color: signature.textColor,
-                                                pointerEvents: 'none' 
-                                            }}>
-                                                {signature.text || 'Signature'}
-                                            </span>
-                                        )}
-                                    </div>
-                                )
-                            ))}
+                                        }}
+                                    />
 
-                            {/* Floating Control Panel */}
-                            {showFloatingControls && selectedElement.type && selectedElement.id && (
-                                <div
-                                    style={{
-                                        position: 'fixed',
-                                        left: `${controlsPosition.x}px`,
-                                        top: `${controlsPosition.y}px`,
-                                        width: `${controlsSize.width}px`,
-                                        height: `${controlsSize.height}px`,
-                                        background: 'linear-gradient(145deg, #2c3e50, #34495e)',
-                                        border: '2px solid #3498db',
-                                        borderRadius: '15px',
-                                        zIndex: 10001,
-                                        overflow: 'hidden',
-                                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                                        minWidth: '380px',
-                                        minHeight: '120px'
-                                    }}
-                                >
-                                    {/* Control Panel Header */}
+                                    {/* Rotation Handle */}
                                     <div
                                         style={{
-                                            background: 'linear-gradient(135deg, #3498db, #2980b9)',
-                                            color: 'white',
-                                            padding: '8px 15px',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
+                                            position: 'absolute',
+                                            top: '-20px',
+                                            left: '50%',
+                                            width: '16px',
+                                            height: '16px',
+                                            background: '#28a745',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            cursor: 'grab',
+                                            transform: 'translateX(-50%)',
+                                            zIndex: 1002,
+                                            display: activeControl === 'watermark' ? 'flex' : 'none',
                                             alignItems: 'center',
-                                            cursor: 'move',
-                                            fontSize: '12px',
-                                            fontWeight: 'bold'
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white'
                                         }}
+                                        title="Rotate"
                                         onMouseDown={(e) => {
-                                            const startX = e.clientX - controlsPosition.x;
-                                            const startY = e.clientY - controlsPosition.y;
+                                            const container = e.currentTarget.parentElement!;
+                                            const rect = container.getBoundingClientRect();
+                                            const centerX = rect.left + rect.width / 2;
+                                            const centerY = rect.top + rect.height / 2;
 
                                             const handleMouseMove = (e: MouseEvent) => {
-                                                setControlsPosition({
-                                                    x: e.clientX - startX,
-                                                    y: e.clientY - startY
+                                                const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+                                                setWatermarkRotation(angle);
+                                            };
+
+                                            const handleMouseUp = () => {
+                                                document.removeEventListener('mousemove', handleMouseMove);
+                                                document.removeEventListener('mouseup', handleMouseUp);
+                                            };
+
+                                            document.addEventListener('mousemove', handleMouseMove);
+                                            document.addEventListener('mouseup', handleMouseUp);
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        ↻
+                                    </div>
+
+                                    {/* Delete Button */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-6px',
+                                            right: '-6px',
+                                            width: '12px',
+                                            height: '12px',
+                                            background: '#dc3545',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            cursor: 'pointer',
+                                            zIndex: 1002,
+                                            display: activeControl === 'watermark' ? 'flex' : 'none',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white'
+                                        }}
+                                        title="Delete Watermark"
+                                        onClick={(e) => {
+                                            if (window.confirm('Delete this watermark?')) {
+                                                setWatermarkText('');
+                                                setWatermarkImage('');
+                                                setEnableWatermark(false);
+                                            }
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        ✕
+                                    </div>
+                                </div>
+                            )
+                        ))}
+
+                            {/* Draggable and Resizable Signature Overlay */}
+                            {enableSignature && (signatureText || signatureImage) && (
+                                <div
+                                    style={{
+                                        position: 'absolute',
+                                        left: `${signaturePosition.x}%`,
+                                        top: `${signaturePosition.y}%`,
+                                        width: `${signatureSize.width}px`,
+                                        height: `${signatureSize.height}px`,
+                                        transform: `translate(-50%, -50%) rotate(${signatureRotation}deg)`,
+                                        background: activeElement.type === 'signature' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
+                                        border: activeElement.type === 'signature' ? '2px solid #28a745' : '2px dashed rgba(0, 0, 0, 0.5)',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '12px',
+                                        color: 'rgba(0, 0, 0, 0.9)',
+                                        userSelect: 'none',
+                                        zIndex: activeElement.type === 'signature' ? 1001 : 999,
+                                        cursor: 'move',
+                                        opacity: signatureOpacity / 100
+                                    }}
+                                    onMouseEnter={() => setActiveControl('signature')}
+                                    onMouseLeave={() => setActiveControl('')}
+                                    onMouseDown={(e) => {
+                                        if (e.target !== e.currentTarget) return;
+                                        setActiveControl('signature');
+                                        const container = e.currentTarget.parentElement!;
+                                        const rect = container.getBoundingClientRect();
+
+                                        const handleMouseMove = (e: MouseEvent) => {
+                                            const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
+                                            const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
+
+                                            setSignaturePosition({
+                                                x: Math.max(10, Math.min(90, x)),
+                                                y: Math.max(10, Math.min(90, y))
+                                            });
+                                        };
+
+                                        const handleMouseUp = () => {
+                                            document.removeEventListener('mousemove', handleMouseMove);
+                                            document.removeEventListener('mouseup', handleMouseUp);
+                                        };
+
+                                        document.addEventListener('mousemove', handleMouseMove);
+                                        document.addEventListener('mouseup', handleMouseUp);
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                    }}
+                                >
+                                    {signatureImage ? (
+                                        <img src={signatureImage} alt="Signature" style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'contain',
+                                            pointerEvents: 'none'
+                                        }} />
+                                    ) : (
+                                        <span style={{ fontSize: '10px', textAlign: 'center', fontStyle: 'italic', pointerEvents: 'none' }}>
+                                            {signatureText || 'Signature'}
+                                        </span>
+                                    )}
+
+                                    {/* Corner Resize Handle */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            bottom: '-6px',
+                                            right: '-6px',
+                                            width: '12px',
+                                            height: '12px',
+                                            background: '#28a745',
+                                            border: '2px solid white',
+                                            borderRadius: '2px',
+                                            cursor: 'nw-resize',
+                                            zIndex: 1002,
+                                            display: activeControl === 'signature' ? 'block' : 'none'
+                                        }}
+                                        title="Resize"
+                                        onMouseDown={(e) => {
+                                            const startSize = { ...signatureSize };
+                                            const startX = e.clientX;
+                                            const startY = e.clientY;
+
+                                            const handleMouseMove = (e: MouseEvent) => {
+                                                const deltaX = e.clientX - startX;
+                                                const deltaY = e.clientY - startY;
+
+                                                setSignatureSize({
+                                                    width: Math.max(50, startSize.width + deltaX),
+                                                    height: Math.max(30, startSize.height + deltaY)
                                                 });
                                             };
 
@@ -3983,228 +3960,55 @@ const generateFallbackPreview = () => {
 
                                             document.addEventListener('mousemove', handleMouseMove);
                                             document.addEventListener('mouseup', handleMouseUp);
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    />
+
+                                    {/* Rotation Handle */}
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-20px',
+                                            left: '50%',
+                                            width: '16px',
+                                            height: '16px',
+                                            background: '#dc3545',
+                                            border: '2px solid white',
+                                            borderRadius: '50%',
+                                            cursor: 'grab',
+                                            transform: 'translateX(-50%)',
+                                            zIndex: 1002,
+                                            display: activeControl === 'signature' ? 'flex' : 'none',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white'
+                                        }}
+                                        title="Rotate"
+                                        onMouseDown={(e) => {
+                                            const container = e.currentTarget.parentElement!;
+                                            const rect = container.getBoundingClientRect();
+                                            const centerX = rect.left + rect.width / 2;
+                                            const centerY = rect.top + rect.height / 2;
+
+                                            const handleMouseMove = (e: MouseEvent) => {
+                                                const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+                                                setSignatureRotation(angle);
+                                            };
+
+                                            const handleMouseUp = () => {
+                                                document.removeEventListener('mousemove', handleMouseMove);
+                                                document.removeEventListener('mouseup', handleMouseUp);
+                                            };
+
+                                            document.addEventListener('mousemove', handleMouseMove);
+                                            document.addEventListener('mouseup', handleMouseUp);
+                                            e.preventDefault();
+                                            e.stopPropagation();
                                         }}
                                     >
-                                        <span>🎛️ {selectedElement.type === 'watermark' ? 'Watermark' : 'Signature'} Controls</span>
-                                        <button
-                                            onClick={() => {
-                                                setShowFloatingControls(false);
-                                                setSelectedElement({ type: null, id: null });
-                                                setMoveMode(false);
-                                            }}
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                color: 'white',
-                                                cursor: 'pointer',
-                                                fontSize: '16px',
-                                                padding: '0'
-                                            }}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-
-                                    {/* Control Panel Body */}
-                                    <div style={{ 
-                                        padding: '15px', 
-                                        display: 'grid', 
-                                        gridTemplateColumns: 'repeat(6, 1fr)', 
-                                        gap: '10px',
-                                        alignItems: 'center',
-                                        height: 'calc(100% - 40px)'
-                                    }}>
-                                        {/* Move Button */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                            <button
-                                                onClick={toggleMoveMode}
-                                                style={{
-                                                    width: '45px',
-                                                    height: '45px',
-                                                    background: moveMode ? 'linear-gradient(135deg, #e74c3c, #c0392b)' : 'linear-gradient(135deg, #95a5a6, #7f8c8d)',
-                                                    border: 'none',
-                                                    borderRadius: '10px',
-                                                    color: 'white',
-                                                    fontSize: '18px',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-                                                    transition: 'all 0.3s ease'
-                                                }}
-                                                title={moveMode ? "Fix Position" : "Enable Move Mode"}
-                                            >
-                                                {moveMode ? '🔒' : '🔄'}
-                                            </button>
-                                            <span style={{ fontSize: '10px', color: '#ecf0f1', textAlign: 'center' }}>Move</span>
-                                        </div>
-
-                                        {/* Resize Slider */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                            <div style={{ 
-                                                width: '45px', 
-                                                height: '45px', 
-                                                background: 'linear-gradient(135deg, #9b59b6, #8e44ad)',
-                                                borderRadius: '10px',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                position: 'relative'
-                                            }}>
-                                                <input
-                                                    type="range"
-                                                    min="20"
-                                                    max="200"
-                                                    defaultValue={100}
-                                                    onChange={(e) => handleElementResize(parseInt(e.target.value))}
-                                                    style={{
-                                                        width: '35px',
-                                                        height: '3px',
-                                                        background: 'rgba(255,255,255,0.3)',
-                                                        outline: 'none',
-                                                        borderRadius: '2px',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                    title="Resize Element"
-                                                />
-                                            </div>
-                                            <span style={{ fontSize: '10px', color: '#ecf0f1', textAlign: 'center' }}>Size</span>
-                                        </div>
-
-                                        {/* Rotation Clock */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                            <div style={{ 
-                                                width: '45px', 
-                                                height: '45px', 
-                                                background: 'linear-gradient(135deg, #f39c12, #e67e22)',
-                                                borderRadius: '50%',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                position: 'relative',
-                                                cursor: 'pointer',
-                                                border: '3px solid rgba(255,255,255,0.2)'
-                                            }}
-                                            onMouseDown={(e) => {
-                                                const rect = e.currentTarget.getBoundingClientRect();
-                                                const centerX = rect.left + rect.width / 2;
-                                                const centerY = rect.top + rect.height / 2;
-
-                                                const handleMouseMove = (e: MouseEvent) => {
-                                                    const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
-                                                    handleElementRotate(angle);
-                                                };
-
-                                                const handleMouseUp = () => {
-                                                    document.removeEventListener('mousemove', handleMouseMove);
-                                                    document.removeEventListener('mouseup', handleMouseUp);
-                                                };
-
-                                                document.addEventListener('mousemove', handleMouseMove);
-                                                document.addEventListener('mouseup', handleMouseUp);
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                            }}
-                                            title="Rotate Element (drag hand)"
-                                            >
-                                                <div style={{
-                                                    width: '2px',
-                                                    height: '18px',
-                                                    background: 'white',
-                                                    position: 'absolute',
-                                                    top: '5px',
-                                                    transformOrigin: 'bottom center',
-                                                    transform: `rotate(${selectedElement.type === 'watermark' 
-                                                        ? watermarks.find(w => w.id === selectedElement.id)?.rotation || 0
-                                                        : signatures.find(s => s.id === selectedElement.id)?.rotation || 0}deg)`
-                                                }}></div>
-                                            </div>
-                                            <span style={{ fontSize: '10px', color: '#ecf0f1', textAlign: 'center' }}>Rotate</span>
-                                        </div>
-
-                                        {/* Delete Button */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                            <button
-                                                onClick={deleteSelectedElement}
-                                                style={{
-                                                    width: '45px',
-                                                    height: '45px',
-                                                    background: 'linear-gradient(135deg, #e74c3c, #c0392b)',
-                                                    border: 'none',
-                                                    borderRadius: '10px',
-                                                    color: 'white',
-                                                    fontSize: '18px',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-                                                    transition: 'all 0.3s ease'
-                                                }}
-                                                title="Delete Element"
-                                            >
-                                                🗑️
-                                            </button>
-                                            <span style={{ fontSize: '10px', color: '#ecf0f1', textAlign: 'center' }}>Delete</span>
-                                        </div>
-
-                                        {/* Edit Button */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                            <button
-                                                onClick={editSelectedElement}
-                                                style={{
-                                                    width: '45px',
-                                                    height: '45px',
-                                                    background: 'linear-gradient(135deg, #3498db, #2980b9)',
-                                                    border: 'none',
-                                                    borderRadius: '10px',
-                                                    color: 'white',
-                                                    fontSize: '18px',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-                                                    transition: 'all 0.3s ease'
-                                                }}
-                                                title="Edit Element"
-                                            >
-                                                ✏️
-                                            </button>
-                                            <span style={{ fontSize: '10px', color: '#ecf0f1', textAlign: 'center' }}>Edit</span>
-                                        </div>
-
-                                        {/* Undo Button */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                                            <button
-                                                onClick={undoElementChange}
-                                                disabled={!elementHistory[`${selectedElement.type}-${selectedElement.id}`] || 
-                                                         elementHistory[`${selectedElement.type}-${selectedElement.id}`]?.length <= 1}
-                                                style={{
-                                                    width: '45px',
-                                                    height: '45px',
-                                                    background: elementHistory[`${selectedElement.type}-${selectedElement.id}`]?.length > 1
-                                                        ? 'linear-gradient(135deg, #27ae60, #229954)'
-                                                        : 'linear-gradient(135deg, #95a5a6, #7f8c8d)',
-                                                    border: 'none',
-                                                    borderRadius: '10px',
-                                                    color: 'white',
-                                                    fontSize: '18px',
-                                                    cursor: elementHistory[`${selectedElement.type}-${selectedElement.id}`]?.length > 1 ? 'pointer' : 'not-allowed',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-                                                    transition: 'all 0.3s ease',
-                                                    opacity: elementHistory[`${selectedElement.type}-${selectedElement.id}`]?.length > 1 ? 1 : 0.5
-                                                }}
-                                                title="Undo Last Change"
-                                            >
-                                                ↶
-                                            </button>
-                                            <span style={{ fontSize: '10px', color: '#ecf0f1', textAlign: 'center' }}>Undo</span>
-                                        </div>
+                                        ↻
                                     </div>
                                 </div>
                             )}

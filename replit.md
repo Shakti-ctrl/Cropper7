@@ -14,20 +14,11 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (August 2025)
 
-### Revolutionary Floating Control Panel System
-- **Advanced Click-to-Control Interface**: Completely redesigned watermark and signature interaction system with intuitive click-to-select mechanism
-- **6-Button Floating Control Panel**: Professional control interface with Move Toggle, Resize Slider, Clock-Style Rotation, Delete, Edit, and Undo buttons
-- **Smart Move Mode**: Toggle-based movement system - click once to enable dragging, click again to fix position for precise control
-- **Dynamic Resize System**: Interactive slider control (20-200%) replacing manual corner resizing for smooth scaling
-- **Clock-Style Rotation**: Revolutionary clock-hand rotation interface allowing intuitive angle adjustment by dragging the clock hand
-- **Universal Element Support**: System works seamlessly with both text and image watermarks/signatures, supporting multiple instances
-- **History & Undo System**: Each element maintains its own change history with dedicated undo functionality
-- **Draggable Control Panel**: Floating control panel is fully draggable and resizable for optimal workflow positioning
-
-### Enhanced Quality Tools Features  
+### Enhanced Quality Tools Features
 - **Reset Button**: Added comprehensive reset functionality that clears all applied effects, filters, adjustments, watermarks, signatures, and borders with one click
 - **Import System**: New import buttons for watermark images (PNG/JPG), signature images (PNG/JPG), and border patterns (image files used as repeating patterns)
-- **Multiple Element Management**: Support for multiple watermarks and signatures with individual property controls
+- **Opacity Controls**: Added separate opacity sliders for watermarks (0-100%) and signatures (0-100%) in the Quality Tools panel
+- **Draggable Elements**: Watermarks and signatures are now draggable and repositionable on the floating preview window with visual feedback overlays
 - **Enhanced Persistence**: All new settings (opacity, position, imported images) are saved in localStorage and restored on page refresh
 
 ### Session Persistence System
