@@ -1626,14 +1626,45 @@ function Main({ appName, aboutText } :any) {
                 reader.onload = (e) => {
                     const result = e.target?.result as string;
                     if (watermarkId) {
-                        // Update specific watermark
-                        updateWatermark(watermarkId, { image: result, text: '' });
+                        // Update specific watermark - ensure it's centered with control point
+                        updateWatermark(watermarkId, { 
+                            image: result, 
+                            text: '',
+                            position: { x: 50, y: 50 } // Always center when importing image
+                        });
                     } else {
-                        // Legacy support
+                        // If no watermarks exist, create new one centered
+                        if (watermarks.length === 0) {
+                            const newWatermark = {
+                                id: `watermark-${Date.now()}`,
+                                text: '',
+                                image: result,
+                                opacity: 70,
+                                position: { x: 50, y: 50 }, // Center position
+                                size: { width: 200, height: 50 },
+                                rotation: 0,
+                                fontSize: 24,
+                                fontFamily: 'Arial, sans-serif',
+                                isBold: false,
+                                isItalic: false,
+                                textAlign: 'center',
+                                textColor: '#FFFFFF',
+                                isMovable: false,
+                                history: []
+                            };
+                            setWatermarks([newWatermark]);
+                        } else {
+                            // Update first watermark
+                            updateWatermark(watermarks[0].id, { 
+                                image: result, 
+                                text: '',
+                                position: { x: 50, y: 50 }
+                            });
+                        }
                         setWatermarkImage(result);
                     }
                     setEnableWatermark(true);
-                    alert('Watermark image imported successfully!');
+                    alert('Watermark image imported successfully! Click the blue control point to adjust settings.');
                 };
                 reader.readAsDataURL(file);
             }
@@ -1654,14 +1685,45 @@ function Main({ appName, aboutText } :any) {
                 reader.onload = (e) => {
                     const result = e.target?.result as string;
                     if (signatureId) {
-                        // Update specific signature
-                        updateSignature(signatureId, { image: result, text: '' });
+                        // Update specific signature - ensure it's centered with control point
+                        updateSignature(signatureId, { 
+                            image: result, 
+                            text: '',
+                            position: { x: 50, y: 50 } // Always center when importing image
+                        });
                     } else {
-                        // Legacy support
+                        // If no signatures exist, create new one centered
+                        if (signatures.length === 0) {
+                            const newSignature = {
+                                id: `signature-${Date.now()}`,
+                                text: '',
+                                image: result,
+                                opacity: 80,
+                                position: { x: 50, y: 50 }, // Center position
+                                size: { width: 150, height: 40 },
+                                rotation: 0,
+                                fontSize: 18,
+                                fontFamily: 'cursive',
+                                isBold: false,
+                                isItalic: true,
+                                textAlign: 'center',
+                                textColor: '#000000',
+                                isMovable: false,
+                                history: []
+                            };
+                            setSignatures([newSignature]);
+                        } else {
+                            // Update first signature
+                            updateSignature(signatures[0].id, { 
+                                image: result, 
+                                text: '',
+                                position: { x: 50, y: 50 }
+                            });
+                        }
                         setSignatureImage(result);
                     }
                     setEnableSignature(true);
-                    alert('Signature image imported successfully!');
+                    alert('Signature image imported successfully! Click the purple control point to adjust settings.');
                 };
                 reader.readAsDataURL(file);
             }
@@ -1691,7 +1753,9 @@ function Main({ appName, aboutText } :any) {
                     const result = e.target?.result as string;
                     setBorderImage(result);
                     setEnableBorder(true);
-                    alert('Border pattern imported! It will be used as a repeating pattern for the border.');
+                    setBorderWidth(10); // Set default border width
+                    setBorderColor('#000000'); // Set default border color
+                    alert('Border pattern imported! It will be used as a repeating pattern for the border. Use the Advanced Border Editor to customize.');
                 };
                 reader.readAsDataURL(file);
             }
@@ -2057,6 +2121,56 @@ const generateFallbackPreview = () => {
         }
     };
 
+    // Enhanced undo function for quality effects
+    const undoQualityEffect = () => {
+        if (qualityHistoryIndex > 0) {
+            const newIndex = qualityHistoryIndex - 1;
+            const previousState = qualityHistory[newIndex];
+
+            setSelectedFilter(previousState.selectedFilter);
+            setAdjustmentValues(previousState.adjustmentValues);
+            setWatermarks([...previousState.watermarks]);
+            setSignatures([...previousState.signatures]);
+            setEnableWatermark(previousState.enableWatermark);
+            setEnableSignature(previousState.enableSignature);
+            setEnableBorder(previousState.enableBorder);
+            setBorderWidth(previousState.borderWidth);
+            setBorderColor(previousState.borderColor);
+            setPreviewImage(previousState.previewImage);
+            setQualityPreviewImage(previousState.previewImage);
+
+            setQualityHistoryIndex(newIndex);
+            alert('↺ Reverted to previous quality settings!');
+        } else {
+            alert('⚠️ No previous quality settings to revert to.');
+        }
+    };
+
+    // Enhanced redo function for quality effects
+    const redoQualityEffect = () => {
+        if (qualityHistoryIndex < qualityHistory.length - 1) {
+            const newIndex = qualityHistoryIndex + 1;
+            const nextState = qualityHistory[newIndex];
+
+            setSelectedFilter(nextState.selectedFilter);
+            setAdjustmentValues(nextState.adjustmentValues);
+            setWatermarks([...nextState.watermarks]);
+            setSignatures([...nextState.signatures]);
+            setEnableWatermark(nextState.enableWatermark);
+            setEnableSignature(nextState.enableSignature);
+            setEnableBorder(nextState.enableBorder);
+            setBorderWidth(nextState.borderWidth);
+            setBorderColor(nextState.borderColor);
+            setPreviewImage(nextState.previewImage);
+            setQualityPreviewImage(nextState.previewImage);
+
+            setQualityHistoryIndex(newIndex);
+            alert('↷ Applied next quality settings!');
+        } else {
+            alert('⚠️ No next quality settings to apply.');
+        }
+    };
+
     // Add event listeners for new Quality Panel functionality
     useEffect(() => {
         const handleImportWatermarkEvent = () => {
@@ -2227,7 +2341,7 @@ const generateFallbackPreview = () => {
                         files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
                     });
                     alert('📄 PDF shared successfully!');
-                } catch (shareError) {
+                } catch (shareError: any) {
                     if (shareError.name !== 'AbortError') {
                         console.log('Share failed:', shareError);
                         alert(`📄 PDF generated successfully! You can share this PDF of ${indicesToShare.length} enhanced images.`);
@@ -2879,56 +2993,6 @@ const generateFallbackPreview = () => {
 
         setQualityHistory(prev => [...prev.slice(0, qualityHistoryIndex + 1), currentState]);
         setQualityHistoryIndex(qualityHistory.length);
-    };
-
-    // Enhanced undo function for quality effects
-    const undoQualityEffect = () => {
-        if (qualityHistoryIndex > 0) {
-            const newIndex = qualityHistoryIndex - 1;
-            const previousState = qualityHistory[newIndex];
-
-            setSelectedFilter(previousState.selectedFilter);
-            setAdjustmentValues(previousState.adjustmentValues);
-            setWatermarks([...previousState.watermarks]);
-            setSignatures([...previousState.signatures]);
-            setEnableWatermark(previousState.enableWatermark);
-            setEnableSignature(previousState.enableSignature);
-            setEnableBorder(previousState.enableBorder);
-            setBorderWidth(previousState.borderWidth);
-            setBorderColor(previousState.borderColor);
-            setPreviewImage(previousState.previewImage);
-            setQualityPreviewImage(previousState.previewImage);
-
-            setQualityHistoryIndex(newIndex);
-            alert('↺ Reverted to previous quality settings!');
-        } else {
-            alert('⚠️ No previous quality settings to revert to.');
-        }
-    };
-
-    // Enhanced redo function for quality effects
-    const redoQualityEffect = () => {
-        if (qualityHistoryIndex < qualityHistory.length - 1) {
-            const newIndex = qualityHistoryIndex + 1;
-            const nextState = qualityHistory[newIndex];
-
-            setSelectedFilter(nextState.selectedFilter);
-            setAdjustmentValues(nextState.adjustmentValues);
-            setWatermarks([...nextState.watermarks]);
-            setSignatures([...nextState.signatures]);
-            setEnableWatermark(nextState.enableWatermark);
-            setEnableSignature(nextState.enableSignature);
-            setEnableBorder(nextState.enableBorder);
-            setBorderWidth(nextState.borderWidth);
-            setBorderColor(nextState.borderColor);
-            setPreviewImage(nextState.previewImage);
-            setQualityPreviewImage(nextState.previewImage);
-
-            setQualityHistoryIndex(newIndex);
-            alert('↷ Applied next quality settings!');
-        } else {
-            alert('⚠️ No next quality settings to apply.');
-        }
     };
 
     const undoPreviewChange = () => {
