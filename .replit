@@ -30,24 +30,6 @@ task = "workflow.run"
 args = "React Dev Server"
 
 [[workflows.workflow]]
-name = "Ioo"
-author = "agent"
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
-
-[[workflows.workflow]]
-name = "Bhyr"
-author = "agent"
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
-
-[[workflows.workflow]]
 name = "React Development Server"
 author = "agent"
 mode = "parallel"
