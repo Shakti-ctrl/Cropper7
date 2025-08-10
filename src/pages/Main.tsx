@@ -44,13 +44,16 @@ const FONT_FAMILIES = [
 // Extended border styles list
 const BORDER_STYLES = [
     'solid',
-    'dashed',
+    'dashed', 
     'dotted',
     'double',
     'groove',
     'ridge',
     'inset',
-    'outset'
+    'outset',
+    'wavy',
+    'zigzag',
+    'decorative'
 ];
 
 // Helper function for drawing rounded rectangles
@@ -669,6 +672,8 @@ function Main({ appName, aboutText } :any) {
     const [borderGradient, setBorderGradient] = useState<string>('');
     const [borderShadow, setBorderShadow] = useState<boolean>(false);
     const [showAdvancedBorderEditor, setShowAdvancedBorderEditor] = useState<boolean>(false);
+                    const [borderPattern, setBorderPattern] = useState<string>('');
+                    const [borderAnimation, setBorderAnimation] = useState<boolean>(false);
 
     // Text styling states for watermark
     const [watermarkFontSize, setWatermarkFontSize] = useState<number>(24);
@@ -2154,12 +2159,16 @@ const generateFallbackPreview = () => {
              const target = e.target as HTMLInputElement;
              const value = parseInt(target.value);
              setWatermarkOpacity(value);
+             // Apply to all watermarks
+             setWatermarks(prev => prev.map(w => ({ ...w, opacity: value })));
         };
 
         const handleSignatureOpacityChange = (e: Event) => {
             const target = e.target as HTMLInputElement;
             const value = parseInt(target.value);
             setSignatureOpacity(value);
+            // Apply to all signatures
+            setSignatures(prev => prev.map(s => ({ ...s, opacity: value })));
         };
 
         window.addEventListener('import-watermark', handleImportWatermarkEvent);
@@ -3905,15 +3914,21 @@ const generateFallbackPreview = () => {
                             <span>🖼️ Live Preview ({currentPreviewIndex + 1}/{Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height).length})</span>
                             <div style={{ display: 'flex', gap: '5px' }}>
                                 <button
-                                    onClick={undoPreviewChange}
-                                    disabled={previewHistoryIndex <= 0}
+                                    onClick={() => {
+                                        if (qualityHistoryIndex > 0) {
+                                            undoQualityEffect();
+                                        } else {
+                                            alert('No changes to undo');
+                                        }
+                                    }}
+                                    disabled={qualityHistoryIndex <= 0}
                                     style={{
-                                        background: previewHistoryIndex > 0 ? '#28a745' : '#6c757d',
+                                        background: qualityHistoryIndex > 0 ? '#28a745' : '#6c757d',
                                         color: 'white',
                                         border: 'none',
                                         padding: '4px 8px',
                                         borderRadius: '3px',
-                                        cursor: previewHistoryIndex > 0 ? 'pointer' : 'not-allowed',
+                                        cursor: qualityHistoryIndex > 0 ? 'pointer' : 'not-allowed',
                                         fontSize: '12px'
                                     }}
                                     title="Undo last change"
@@ -3945,7 +3960,7 @@ const generateFallbackPreview = () => {
                                 }}
                             />
 
-                            {/* Enhanced Watermark Overlays with New Control System */}
+                            {/* Enhanced Watermark Overlays with Control Points */}
                             {enableWatermark && watermarks.map((watermark) => (
                                 <div
                                     key={watermark.id}
@@ -3956,25 +3971,20 @@ const generateFallbackPreview = () => {
                                         width: `${watermark.size.width}px`,
                                         height: `${watermark.size.height}px`,
                                         transform: `translate(-50%, -50%) rotate(${watermark.rotation}deg)`,
-                                        background: selectedElement.type === 'watermark' && selectedElement.id === watermark.id ? 'rgba(0, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                                        border: selectedElement.type === 'watermark' && selectedElement.id === watermark.id ? '3px solid #00ffff' : '2px dashed rgba(255, 255, 255, 0.5)',
-                                        padding: '4px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        fontSize: `${watermark.fontSize}px`,
+                                        fontSize: `${watermark.fontSize * 0.5}px`, // Scale for preview
                                         fontFamily: watermark.fontFamily,
                                         fontWeight: watermark.isBold ? 'bold' : 'normal',
                                         fontStyle: watermark.isItalic ? 'italic' : 'normal',
                                         color: watermark.textColor,
                                         userSelect: 'none',
                                         zIndex: selectedElement.type === 'watermark' && selectedElement.id === watermark.id ? 1001 : 999,
-                                        cursor: watermark.isMovable ? 'move' : 'pointer',
                                         opacity: watermark.opacity / 100,
-                                        boxShadow: selectedElement.type === 'watermark' && selectedElement.id === watermark.id ? '0 0 15px rgba(0, 255, 255, 0.8)' : 'none',
-                                        transition: 'all 0.3s ease'
+                                        transition: 'all 0.3s ease',
+                                        pointerEvents: 'none'
                                     }}
-                                    onClick={(e) => handleElementClick('watermark', watermark.id, e)}
                                     onMouseDown={(e) => {
                                         if (!watermark.isMovable || e.button !== 0) return;
                                         
@@ -4029,6 +4039,34 @@ const generateFallbackPreview = () => {
                                         </span>
                                     )}
                                     
+                                    {/* Control Point */}
+                                    <div 
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-8px',
+                                            right: '-8px',
+                                            width: '16px',
+                                            height: '16px',
+                                            background: 'linear-gradient(45deg, #00ffff, #0080ff)',
+                                            borderRadius: '50%',
+                                            border: '2px solid white',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 2px 8px rgba(0,255,255,0.6)',
+                                            pointerEvents: 'auto',
+                                            zIndex: 1002,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white',
+                                            fontWeight: 'bold'
+                                        }}
+                                        onClick={(e) => handleElementClick('watermark', watermark.id, e)}
+                                        title="Click to control watermark"
+                                    >
+                                        W
+                                    </div>
+                                    
                                     {/* Selection indicator */}
                                     {selectedElement.type === 'watermark' && selectedElement.id === watermark.id && (
                                         <div style={{
@@ -4046,7 +4084,7 @@ const generateFallbackPreview = () => {
                                 </div>
                             ))}
 
-                            {/* Enhanced Signature Overlays with New Control System */}
+                            {/* Enhanced Signature Overlays with Control Points */}
                             {enableSignature && signatures.map((signature) => (
                                 <div
                                     key={signature.id}
@@ -4057,25 +4095,20 @@ const generateFallbackPreview = () => {
                                         width: `${signature.size.width}px`,
                                         height: `${signature.size.height}px`,
                                         transform: `translate(-50%, -50%) rotate(${signature.rotation}deg)`,
-                                        background: selectedElement.type === 'signature' && selectedElement.id === signature.id ? 'rgba(255, 0, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
-                                        border: selectedElement.type === 'signature' && selectedElement.id === signature.id ? '3px solid #ff00ff' : '2px dashed rgba(0, 0, 0, 0.5)',
-                                        padding: '4px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        fontSize: `${signature.fontSize}px`,
+                                        fontSize: `${signature.fontSize * 0.5}px`, // Scale for preview
                                         fontFamily: signature.fontFamily,
                                         fontWeight: signature.isBold ? 'bold' : 'normal',
                                         fontStyle: signature.isItalic ? 'italic' : 'normal',
                                         color: signature.textColor,
                                         userSelect: 'none',
                                         zIndex: selectedElement.type === 'signature' && selectedElement.id === signature.id ? 1001 : 999,
-                                        cursor: signature.isMovable ? 'move' : 'pointer',
                                         opacity: signature.opacity / 100,
-                                        boxShadow: selectedElement.type === 'signature' && selectedElement.id === signature.id ? '0 0 15px rgba(255, 0, 255, 0.8)' : 'none',
-                                        transition: 'all 0.3s ease'
+                                        transition: 'all 0.3s ease',
+                                        pointerEvents: 'none'
                                     }}
-                                    onClick={(e) => handleElementClick('signature', signature.id, e)}
                                     onMouseDown={(e) => {
                                         if (!signature.isMovable || e.button !== 0) return;
                                         
@@ -4129,6 +4162,34 @@ const generateFallbackPreview = () => {
                                             {signature.text || 'Signature'}
                                         </span>
                                     )}
+                                    
+                                    {/* Control Point */}
+                                    <div 
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-8px',
+                                            left: '-8px',
+                                            width: '16px',
+                                            height: '16px',
+                                            background: 'linear-gradient(45deg, #ff00ff, #ff8000)',
+                                            borderRadius: '50%',
+                                            border: '2px solid white',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 2px 8px rgba(255,0,255,0.6)',
+                                            pointerEvents: 'auto',
+                                            zIndex: 1002,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '8px',
+                                            color: 'white',
+                                            fontWeight: 'bold'
+                                        }}
+                                        onClick={(e) => handleElementClick('signature', signature.id, e)}
+                                        title="Click to control signature"
+                                    >
+                                        S
+                                    </div>
                                     
                                     {/* Selection indicator */}
                                     {selectedElement.type === 'signature' && selectedElement.id === signature.id && (
@@ -4441,29 +4502,33 @@ const generateFallbackPreview = () => {
                                 </button>
                             </div>
 
-                            {/* Size Slider */}
+                            {/* Font Size Slider */}
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
-                                    📏 Size: {(() => {
+                                    📏 Text Size: {(() => {
                                         const element = selectedElement.type === 'watermark' 
                                             ? watermarks.find(w => w.id === selectedElement.id)
                                             : signatures.find(s => s.id === selectedElement.id);
-                                        return Math.round(((element?.size.width || 100) / 200) * 100);
-                                    })()}%
+                                        return element?.fontSize || 18;
+                                    })()}px
                                 </label>
                                 <input
                                     type="range"
-                                    min="50"
-                                    max="200"
+                                    min="10"
+                                    max="80"
                                     value={(() => {
                                         const element = selectedElement.type === 'watermark' 
                                             ? watermarks.find(w => w.id === selectedElement.id)
                                             : signatures.find(s => s.id === selectedElement.id);
-                                        return Math.round(((element?.size.width || 100) / 200) * 100);
+                                        return element?.fontSize || 18;
                                     })()}
                                     onChange={(e) => {
-                                        const scale = parseInt(e.target.value);
-                                        resizeElement(selectedElement.type!, selectedElement.id!, scale);
+                                        const fontSize = parseInt(e.target.value);
+                                        if (selectedElement.type === 'watermark') {
+                                            updateWatermark(selectedElement.id!, { fontSize });
+                                        } else {
+                                            updateSignature(selectedElement.id!, { fontSize });
+                                        }
                                     }}
                                     style={{ width: '100%', marginBottom: '5px' }}
                                 />
@@ -4797,6 +4862,182 @@ const generateFallbackPreview = () => {
                                     onFilterSelect={setSelectedFilter}
                                     selectedFilter={selectedFilter}
                                 />
+                            </DraggablePanel>
+                        )}
+
+                        {/* Advanced Border Editor Panel */}
+                        {showAdvancedBorderEditor && (
+                            <DraggablePanel
+                                title="🖼️ Advanced Border Editor"
+                                onClose={() => setShowAdvancedBorderEditor(false)}
+                                initialPosition={{ x: window.innerWidth - 400, y: 100 }}
+                                initialSize={{ width: 380, height: 600 }}
+                                borderColor="#9C27B0"
+                            >
+                                <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    {/* Enable Border Toggle */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={enableBorder} 
+                                            onChange={(e) => setEnableBorder(e.target.checked)} 
+                                        />
+                                        <label style={{ fontWeight: 'bold', color: '#333' }}>Enable Border</label>
+                                    </div>
+
+                                    {enableBorder && (
+                                        <>
+                                            {/* Border Width */}
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
+                                                    Border Width: {borderWidth}px
+                                                </label>
+                                                <input
+                                                    type="range"
+                                                    min="1"
+                                                    max="50"
+                                                    value={borderWidth}
+                                                    onChange={(e) => setBorderWidth(parseInt(e.target.value))}
+                                                    style={{ width: '100%' }}
+                                                />
+                                            </div>
+
+                                            {/* Border Color */}
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
+                                                    Border Color
+                                                </label>
+                                                <input
+                                                    type="color"
+                                                    value={borderColor}
+                                                    onChange={(e) => setBorderColor(e.target.value)}
+                                                    style={{ width: '100%', height: '40px', border: 'none', borderRadius: '5px' }}
+                                                />
+                                            </div>
+
+                                            {/* Border Style */}
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
+                                                    Border Style
+                                                </label>
+                                                <select
+                                                    value={borderStyle}
+                                                    onChange={(e) => setBorderStyle(e.target.value)}
+                                                    style={{ width: '100%', padding: '8px', border: '2px solid #ddd', borderRadius: '5px' }}
+                                                >
+                                                    {BORDER_STYLES.map(style => (
+                                                        <option key={style} value={style}>{style}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Border Radius */}
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
+                                                    Border Radius: {borderRadius}px
+                                                </label>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="50"
+                                                    value={borderRadius}
+                                                    onChange={(e) => setBorderRadius(parseInt(e.target.value))}
+                                                    style={{ width: '100%' }}
+                                                />
+                                            </div>
+
+                                            {/* Border Shadow */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={borderShadow} 
+                                                    onChange={(e) => setBorderShadow(e.target.checked)} 
+                                                />
+                                                <label style={{ fontWeight: 'bold', color: '#333' }}>Add Shadow Effect</label>
+                                            </div>
+
+                                            {/* Border Animation */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={borderAnimation} 
+                                                    onChange={(e) => setBorderAnimation(e.target.checked)} 
+                                                />
+                                                <label style={{ fontWeight: 'bold', color: '#333' }}>Animated Border</label>
+                                            </div>
+
+                                            {/* Quick Presets */}
+                                            <div>
+                                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
+                                                    Quick Presets
+                                                </label>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setBorderWidth(5);
+                                                            setBorderColor('#000000');
+                                                            setBorderStyle('solid');
+                                                            setBorderRadius(0);
+                                                        }}
+                                                        style={{ padding: '8px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer' }}
+                                                    >
+                                                        Classic
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setBorderWidth(8);
+                                                            setBorderColor('#FFD700');
+                                                            setBorderStyle('groove');
+                                                            setBorderRadius(10);
+                                                        }}
+                                                        style={{ padding: '8px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer' }}
+                                                    >
+                                                        Gold Frame
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setBorderWidth(3);
+                                                            setBorderColor('#2196F3');
+                                                            setBorderStyle('dashed');
+                                                            setBorderRadius(15);
+                                                        }}
+                                                        style={{ padding: '8px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer' }}
+                                                    >
+                                                        Modern
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setBorderWidth(12);
+                                                            setBorderColor('#8B4513');
+                                                            setBorderStyle('ridge');
+                                                            setBorderRadius(5);
+                                                        }}
+                                                        style={{ padding: '8px', background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer' }}
+                                                    >
+                                                        Vintage
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Import Border Pattern */}
+                                            <button
+                                                onClick={handleImportBorder}
+                                                style={{
+                                                    background: '#2196F3',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    padding: '12px',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    fontSize: '14px',
+                                                    fontWeight: 'bold'
+                                                }}
+                                            >
+                                                📷 Import Custom Border Pattern
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </DraggablePanel>
                         )}
 
