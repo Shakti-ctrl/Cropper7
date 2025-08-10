@@ -689,7 +689,7 @@ function Main({ appName, aboutText } :any) {
 
     const [activeElement, setActiveElement] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
     const [selectedElementForEdit, setSelectedElementForEdit] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
-
+    
     // Control panel state
     const [showControlPanel, setShowControlPanel] = useState<boolean>(false);
     const [controlPanelPosition, setControlPanelPosition] = useState({ x: 50, y: 50 });
@@ -1446,14 +1446,14 @@ function Main({ appName, aboutText } :any) {
     const handleElementClick = (type: 'watermark' | 'signature', id: string, event: React.MouseEvent) => {
         event.preventDefault();
         event.stopPropagation();
-
+        
         // Save element state before making changes
         saveElementHistory(type, id);
-
+        
         setSelectedElement({ type, id });
         setActiveElement({ type, id });
         setShowControlPanel(true);
-
+        
         // Position control panel near the clicked element
         const rect = event.currentTarget.getBoundingClientRect();
         setControlPanelPosition({
@@ -2865,7 +2865,7 @@ const generateFallbackPreview = () => {
             setQualityPreviewImage(nextState.previewImage);
 
             setQualityHistoryIndex(newIndex);
-            alert('Redo applied!');
+            alert('↷ Applied next quality settings!');
         } else {
             alert('⚠️ No next quality settings to apply.');
         }
@@ -2881,7 +2881,7 @@ const generateFallbackPreview = () => {
     };
 
     const getProcessedCount = () => {
-        return Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height).length;
+        return Object.keys(crops).filter(key => crops[parseInt(key)]?.width && crops[parseInt(key)]?.height).length;
     };
 
     // Toggle zoom for a specific image
@@ -3871,10 +3871,10 @@ const generateFallbackPreview = () => {
                                     onClick={(e) => handleElementClick('watermark', watermark.id, e)}
                                     onMouseDown={(e) => {
                                         if (!watermark.isMovable || e.button !== 0) return;
-
+                                        
                                         e.preventDefault();
                                         e.stopPropagation();
-
+                                        
                                         const container = e.currentTarget.parentElement!;
                                         const rect = container.getBoundingClientRect();
                                         const startX = e.clientX;
@@ -3884,12 +3884,12 @@ const generateFallbackPreview = () => {
                                         const handleMouseMove = (e: MouseEvent) => {
                                             const deltaX = ((e.clientX - startX) / rect.width) * 100;
                                             const deltaY = ((e.clientY - startY) / rect.height) * 100;
-
+                                            
                                             const newPos = {
                                                 x: Math.max(5, Math.min(95, startPos.x + deltaX)),
                                                 y: Math.max(5, Math.min(95, startPos.y + deltaY))
                                             };
-
+                                            
                                             updateWatermark(watermark.id, { position: newPos });
                                         };
 
@@ -3922,7 +3922,7 @@ const generateFallbackPreview = () => {
                                             {watermark.text || 'Watermark'}
                                         </span>
                                     )}
-
+                                    
                                     {/* Selection indicator */}
                                     {selectedElement.type === 'watermark' && selectedElement.id === watermark.id && (
                                         <div style={{
@@ -3972,10 +3972,10 @@ const generateFallbackPreview = () => {
                                     onClick={(e) => handleElementClick('signature', signature.id, e)}
                                     onMouseDown={(e) => {
                                         if (!signature.isMovable || e.button !== 0) return;
-
+                                        
                                         e.preventDefault();
                                         e.stopPropagation();
-
+                                        
                                         const container = e.currentTarget.parentElement!;
                                         const rect = container.getBoundingClientRect();
                                         const startX = e.clientX;
@@ -3985,12 +3985,12 @@ const generateFallbackPreview = () => {
                                         const handleMouseMove = (e: MouseEvent) => {
                                             const deltaX = ((e.clientX - startX) / rect.width) * 100;
                                             const deltaY = ((e.clientY - startY) / rect.height) * 100;
-
+                                            
                                             const newPos = {
                                                 x: Math.max(5, Math.min(95, startPos.x + deltaX)),
                                                 y: Math.max(5, Math.min(95, startPos.y + deltaY))
                                             };
-
+                                            
                                             updateSignature(signature.id, { position: newPos });
                                         };
 
@@ -4023,7 +4023,7 @@ const generateFallbackPreview = () => {
                                             {signature.text || 'Signature'}
                                         </span>
                                     )}
-
+                                    
                                     {/* Selection indicator */}
                                     {selectedElement.type === 'signature' && selectedElement.id === signature.id && (
                                         <div style={{
