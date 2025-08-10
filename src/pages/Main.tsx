@@ -4524,8 +4524,8 @@ const generateFallbackPreview = () => {
                                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                     <input
                                         type="range"
-                                        min="10"
-                                        max="80"
+                                        min="1"
+                                        max="200"
                                         value={(() => {
                                             const element = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
@@ -4544,8 +4544,7 @@ const generateFallbackPreview = () => {
                                     />
                                     <input
                                         type="number"
-                                        min="10"
-                                        max="80"
+                                        min="1"
                                         value={(() => {
                                             const element = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
@@ -4553,7 +4552,7 @@ const generateFallbackPreview = () => {
                                             return element?.fontSize || 18;
                                         })()}
                                         onChange={(e) => {
-                                            const fontSize = Math.max(10, Math.min(80, parseInt(e.target.value) || 18));
+                                            const fontSize = Math.max(1, parseInt(e.target.value) || 18);
                                             if (selectedElement.type === 'watermark') {
                                                 updateWatermark(selectedElement.id!, { fontSize });
                                             } else {
@@ -4578,8 +4577,8 @@ const generateFallbackPreview = () => {
                                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                     <input
                                         type="range"
-                                        min="50"
-                                        max="400"
+                                        min="10"
+                                        max="800"
                                         value={(() => {
                                             const element = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
@@ -4604,8 +4603,7 @@ const generateFallbackPreview = () => {
                                     />
                                     <input
                                         type="number"
-                                        min="50"
-                                        max="400"
+                                        min="10"
                                         value={(() => {
                                             const element = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
@@ -4613,7 +4611,7 @@ const generateFallbackPreview = () => {
                                             return element?.size.width || 150;
                                         })()}
                                         onChange={(e) => {
-                                            const width = Math.max(50, Math.min(400, parseInt(e.target.value) || 150));
+                                            const width = Math.max(10, parseInt(e.target.value) || 150);
                                             const currentElement = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
                                                 : signatures.find(s => s.id === selectedElement.id);
@@ -4644,8 +4642,8 @@ const generateFallbackPreview = () => {
                                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                     <input
                                         type="range"
-                                        min="30"
-                                        max="200"
+                                        min="10"
+                                        max="400"
                                         value={(() => {
                                             const element = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
@@ -4670,8 +4668,7 @@ const generateFallbackPreview = () => {
                                     />
                                     <input
                                         type="number"
-                                        min="30"
-                                        max="200"
+                                        min="10"
                                         value={(() => {
                                             const element = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
@@ -4679,7 +4676,7 @@ const generateFallbackPreview = () => {
                                             return element?.size.height || 50;
                                         })()}
                                         onChange={(e) => {
-                                            const height = Math.max(30, Math.min(200, parseInt(e.target.value) || 50));
+                                            const height = Math.max(10, parseInt(e.target.value) || 50);
                                             const currentElement = selectedElement.type === 'watermark' 
                                                 ? watermarks.find(w => w.id === selectedElement.id)
                                                 : signatures.find(s => s.id === selectedElement.id);
@@ -4937,7 +4934,7 @@ const generateFallbackPreview = () => {
                                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                         <input
                                             type="range"
-                                            min="10"
+                                            min="1"
                                             max="100"
                                             value={(() => {
                                                 const element = selectedElement.type === 'watermark' 
@@ -4957,7 +4954,7 @@ const generateFallbackPreview = () => {
                                         />
                                         <input
                                             type="number"
-                                            min="10"
+                                            min="1"
                                             max="100"
                                             value={(() => {
                                                 const element = selectedElement.type === 'watermark' 
@@ -4966,7 +4963,7 @@ const generateFallbackPreview = () => {
                                                 return element?.opacity || 100;
                                             })()}
                                             onChange={(e) => {
-                                                const opacity = Math.max(10, Math.min(100, parseInt(e.target.value) || 100));
+                                                const opacity = Math.max(1, Math.min(100, parseInt(e.target.value) || 100));
                                                 if (selectedElement.type === 'watermark') {
                                                     updateWatermark(selectedElement.id!, { opacity });
                                                 } else {
