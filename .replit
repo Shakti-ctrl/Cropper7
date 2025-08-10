@@ -30,7 +30,7 @@ task = "workflow.run"
 args = "React Dev Server"
 
 [[workflows.workflow]]
-name = "Educational File Server"
+name = "Ioo"
 author = "agent"
 mode = "sequential"
 
@@ -39,8 +39,9 @@ task = "shell.exec"
 args = ""
 
 [[workflows.workflow]]
-name = "display_alpha_file"
+name = "Bhyr"
 author = "agent"
+mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
@@ -49,6 +50,7 @@ args = ""
 [[workflows.workflow]]
 name = "React Development Server"
 author = "agent"
+mode = "parallel"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
