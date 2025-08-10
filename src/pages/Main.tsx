@@ -6,6 +6,7 @@ import About from "../component/About";
 import AdjustmentsPanel from "../component/AdjustmentsPanel";
 import EffectFilters from "../component/EffectFilters";
 import QualityPanel from "../component/QualityPanel";
+import FloatingPanel from "../component/FloatingPanel";
 
 
 const cropSizePresets = [
@@ -583,9 +584,9 @@ function Main({ appName, aboutText } :any) {
     const [showComparison, setShowComparison] = useState<boolean>(false);
     const [watermarkText, setWatermarkText] = useState<string>('WATERMARK');
     const [signatureText, setSignatureText] = useState<string>('');
-    const [enableWatermark, setEnableWatermark] = useState<boolean>(false);
+    const [enableWatermark, setEnableWatermark] = useState<boolean>(true);
     const [enableBorder, setEnableBorder] = useState<boolean>(false);
-    const [enableSignature, setEnableSignature] = useState<boolean>(false);
+    const [enableSignature, setEnableSignature] = useState<boolean>(true);
     const [rearrangeMode, setRearrangeMode] = useState<boolean>(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -665,7 +666,7 @@ function Main({ appName, aboutText } :any) {
         textColor: string;
     }>>([{
         id: 'signature-1',
-        text: '',
+        text: 'Signature',
         image: '',
         opacity: 80,
         position: { x: 5, y: 95 },
@@ -3978,233 +3979,29 @@ const generateFallbackPreview = () => {
                                 )
                             ))}
 
-                            {/* Floating Control Panel */}
-                            {floatingPanelVisible && selectedElement.type && selectedElement.id && (
-                                <div
-                                    style={{
-                                        position: 'absolute',
-                                        left: `${floatingPanelPosition.x}px`,
-                                        top: `${floatingPanelPosition.y}px`,
-                                        background: 'rgba(40, 44, 52, 0.95)',
-                                        border: '2px solid #007bff',
-                                        borderRadius: '10px',
-                                        padding: '12px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '8px',
-                                        minWidth: '240px',
-                                        maxWidth: '280px',
-                                        zIndex: 2000,
-                                        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.4)',
-                                        userSelect: 'none',
-                                        backdropFilter: 'blur(10px)',
-                                        cursor: 'default'
-                                    }}
-                                    onClick={(e) => e.stopPropagation()}
-                                    onMouseDown={(e) => {
-                                        const startX = e.clientX - floatingPanelPosition.x;
-                                        const startY = e.clientY - floatingPanelPosition.y;
-
-                                        const handleMouseMove = (e: MouseEvent) => {
-                                            setFloatingPanelPosition({
-                                                x: e.clientX - startX,
-                                                y: e.clientY - startY
-                                            });
-                                        };
-
-                                        const handleMouseUp = () => {
-                                            document.removeEventListener('mousemove', handleMouseMove);
-                                            document.removeEventListener('mouseup', handleMouseUp);
-                                        };
-
-                                        document.addEventListener('mousemove', handleMouseMove);
-                                        document.addEventListener('mouseup', handleMouseUp);
-                                    }}
-                                >
-                                    {/* Panel Header */}
-                                    <div style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
-                                        paddingBottom: '6px',
-                                        marginBottom: '4px'
-                                    }}>
-                                        <span style={{ 
-                                            color: '#007bff', 
-                                            fontSize: '14px', 
-                                            fontWeight: 'bold',
-                                            textTransform: 'capitalize'
-                                        }}>
-                                            {selectedElement.type} Controls
-                                        </span>
-                                        <button
-                                            onClick={() => {
-                                                setFloatingPanelVisible(false);
-                                                setSelectedElement({ type: null, id: null });
-                                                setMoveMode(false);
-                                            }}
-                                            style={{
-                                                background: 'transparent',
-                                                border: 'none',
-                                                color: '#ff6b6b',
-                                                fontSize: '16px',
-                                                cursor: 'pointer',
-                                                padding: '2px'
-                                            }}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-
-                                    {/* Control Buttons Row 1 */}
-                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                        {/* ① Move Button */}
-                                        <button
-                                            onClick={handleMoveToggle}
-                                            style={{
-                                                flex: 1,
-                                                background: moveMode ? '#28a745' : '#6c757d',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '6px',
-                                                padding: '8px',
-                                                fontSize: '12px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '4px',
-                                                fontWeight: '500'
-                                            }}
-                                            title={moveMode ? 'Lock Position' : 'Enable Move Mode'}
-                                        >
-                                            {moveMode ? '🔒' : '📐'} {moveMode ? 'Lock' : 'Move'}
-                                        </button>
-
-                                        {/* ④ Delete Button */}
-                                        <button
-                                            onClick={handleElementDelete}
-                                            style={{
-                                                flex: 1,
-                                                background: '#dc3545',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '6px',
-                                                padding: '8px',
-                                                fontSize: '12px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '4px',
-                                                fontWeight: '500'
-                                            }}
-                                            title="Delete Element"
-                                        >
-                                            🗑️ Delete
-                                        </button>
-                                    </div>
-
-                                    {/* ② Resize Slider */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <label style={{ color: 'white', fontSize: '12px', fontWeight: '500' }}>
-                                            📏 Size: {Math.round(((selectedElement.type === 'watermark' 
-                                                ? watermarks.find(w => w.id === selectedElement.id)?.size.width 
-                                                : signatures.find(s => s.id === selectedElement.id)?.size.width) || 200) / 2)}%
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="50"
-                                            max="200"
-                                            value={((selectedElement.type === 'watermark' 
-                                                ? watermarks.find(w => w.id === selectedElement.id)?.size.width 
-                                                : signatures.find(s => s.id === selectedElement.id)?.size.width) || 200) / 2}
-                                            onChange={(e) => handleElementResize(parseInt(e.target.value))}
-                                            style={{
-                                                width: '100%',
-                                                accentColor: '#007bff'
-                                            }}
-                                        />
-                                    </div>
-
-                                    {/* ③ Rotate Dial */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <label style={{ color: 'white', fontSize: '12px', fontWeight: '500' }}>
-                                            🔄 Rotate:
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="360"
-                                            value={selectedElement.type === 'watermark' 
-                                                ? watermarks.find(w => w.id === selectedElement.id)?.rotation || 0
-                                                : signatures.find(s => s.id === selectedElement.id)?.rotation || 0}
-                                            onChange={(e) => handleElementRotate(parseInt(e.target.value))}
-                                            style={{
-                                                flex: 1,
-                                                accentColor: '#28a745'
-                                            }}
-                                        />
-                                        <span style={{ color: 'white', fontSize: '11px', minWidth: '35px' }}>
-                                            {Math.round(selectedElement.type === 'watermark' 
-                                                ? watermarks.find(w => w.id === selectedElement.id)?.rotation || 0
-                                                : signatures.find(s => s.id === selectedElement.id)?.rotation || 0)}°
-                                        </span>
-                                    </div>
-
-                                    {/* Control Buttons Row 2 */}
-                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                        {/* ⑤ Edit Button */}
-                                        <button
-                                            onClick={handleElementEdit}
-                                            style={{
-                                                flex: 1,
-                                                background: '#17a2b8',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '6px',
-                                                padding: '8px',
-                                                fontSize: '12px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '4px',
-                                                fontWeight: '500'
-                                            }}
-                                            title="Edit Properties"
-                                        >
-                                            ✏️ Edit
-                                        </button>
-
-                                        {/* ⑥ Undo Button */}
-                                        <button
-                                            onClick={() => selectedElement.type && selectedElement.id && undoElementChange(selectedElement.type, selectedElement.id)}
-                                            style={{
-                                                flex: 1,
-                                                background: '#6f42c1',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '6px',
-                                                padding: '8px',
-                                                fontSize: '12px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '4px',
-                                                fontWeight: '500',
-                                                opacity: (elementHistory.get(`${selectedElement.type}-${selectedElement.id}`)?.length || 0) > 0 ? 1 : 0.5
-                                            }}
-                                            disabled={(elementHistory.get(`${selectedElement.type}-${selectedElement.id}`)?.length || 0) === 0}
-                                            title="Undo Last Change"
-                                        >
-                                            ↶ Undo
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
+                            {/* Floating Control Panel Component */}
+                            <FloatingPanel
+                                visible={floatingPanelVisible}
+                                position={floatingPanelPosition}
+                                selectedElement={selectedElement}
+                                moveMode={moveMode}
+                                elementData={selectedElement.type === 'watermark' 
+                                    ? watermarks.find(w => w.id === selectedElement.id)
+                                    : signatures.find(s => s.id === selectedElement.id)}
+                                onClose={() => {
+                                    setFloatingPanelVisible(false);
+                                    setSelectedElement({ type: null, id: null });
+                                    setMoveMode(false);
+                                }}
+                                onMove={setFloatingPanelPosition}
+                                onMoveToggle={handleMoveToggle}
+                                onResize={handleElementResize}
+                                onRotate={handleElementRotate}
+                                onDelete={handleElementDelete}
+                                onEdit={handleElementEdit}
+                                onUndo={() => selectedElement.type && selectedElement.id && undoElementChange(selectedElement.type, selectedElement.id)}
+                                canUndo={(elementHistory.get(`${selectedElement.type}-${selectedElement.id}`)?.length || 0) > 0}
+                            />
 
                             {/* Navigation Buttons */}
                             {Object.keys(crops).filter(key => crops[parseInt(key)] && crops[parseInt(key)].width && crops[parseInt(key)].height).length > 1 && (
