@@ -682,6 +682,13 @@ function Main({ appName, aboutText } :any) {
     const [activeElement, setActiveElement] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
     const [selectedElementForEdit, setSelectedElementForEdit] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
 
+    // Floating Control Panel States
+    const [floatingPanelVisible, setFloatingPanelVisible] = useState<boolean>(false);
+    const [floatingPanelPosition, setFloatingPanelPosition] = useState({ x: 100, y: 100 });
+    const [selectedElement, setSelectedElement] = useState<{ type: 'watermark' | 'signature' | null; id: string | null }>({ type: null, id: null });
+    const [moveMode, setMoveMode] = useState<boolean>(false);
+    const [elementHistory, setElementHistory] = useState<Map<string, any[]>>(new Map());
+
     // Backward compatibility states
     const [watermarkOpacity, setWatermarkOpacity] = useState<number>(70);
     const [signatureOpacity, setSignatureOpacity] = useState<number>(80);
@@ -1308,6 +1315,137 @@ function Main({ appName, aboutText } :any) {
     // Update signature
     const updateSignature = (id: string, updates: Partial<typeof signatures[0]>) => {
         setSignatures(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    };
+
+    // Floating Panel Control Functions
+    const saveElementState = (elementType: 'watermark' | 'signature', elementId: string) => {
+        const currentElement = elementType === 'watermark' 
+            ? watermarks.find(w => w.id === elementId)
+            : signatures.find(s => s.id === elementId);
+        
+        if (currentElement) {
+            const key = `${elementType}-${elementId}`;
+            setElementHistory(prev => {
+                const newHistory = new Map(prev);
+                const currentHistory = newHistory.get(key) || [];
+                newHistory.set(key, [...currentHistory, { ...currentElement }]);
+                return newHistory;
+            });
+        }
+    };
+
+    const undoElementChange = (elementType: 'watermark' | 'signature', elementId: string) => {
+        const key = `${elementType}-${elementId}`;
+        const history = elementHistory.get(key) || [];
+        
+        if (history.length > 0) {
+            const previousState = history[history.length - 1];
+            if (elementType === 'watermark') {
+                updateWatermark(elementId, previousState);
+            } else {
+                updateSignature(elementId, previousState);
+            }
+            
+            setElementHistory(prev => {
+                const newHistory = new Map(prev);
+                newHistory.set(key, history.slice(0, -1));
+                return newHistory;
+            });
+        }
+    };
+
+    const handleElementClick = (elementType: 'watermark' | 'signature', elementId: string, event: React.MouseEvent) => {
+        event.stopPropagation();
+        
+        // Save current state before selecting
+        saveElementState(elementType, elementId);
+        
+        setSelectedElement({ type: elementType, id: elementId });
+        setFloatingPanelVisible(true);
+        
+        // Position panel near the element but not overlapping
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        setFloatingPanelPosition({
+            x: rect.right + 10,
+            y: Math.max(10, rect.top - 50)
+        });
+        
+        setMoveMode(false);
+    };
+
+    const handleMoveToggle = () => {
+        if (selectedElement.type && selectedElement.id) {
+            saveElementState(selectedElement.type, selectedElement.id);
+            setMoveMode(!moveMode);
+        }
+    };
+
+    const handleElementResize = (scale: number) => {
+        if (selectedElement.type && selectedElement.id) {
+            const currentElement = selectedElement.type === 'watermark' 
+                ? watermarks.find(w => w.id === selectedElement.id)
+                : signatures.find(s => s.id === selectedElement.id);
+            
+            if (currentElement) {
+                const baseSize = selectedElement.type === 'watermark' ? 200 : 150;
+                const newSize = {
+                    width: Math.max(50, (baseSize * scale) / 100),
+                    height: Math.max(30, (baseSize * 0.25 * scale) / 100)
+                };
+                
+                if (selectedElement.type === 'watermark') {
+                    updateWatermark(selectedElement.id, { size: newSize });
+                } else {
+                    updateSignature(selectedElement.id, { size: newSize });
+                }
+            }
+        }
+    };
+
+    const handleElementRotate = (angle: number) => {
+        if (selectedElement.type && selectedElement.id) {
+            if (selectedElement.type === 'watermark') {
+                updateWatermark(selectedElement.id, { rotation: angle });
+            } else {
+                updateSignature(selectedElement.id, { rotation: angle });
+            }
+        }
+    };
+
+    const handleElementDelete = () => {
+        if (selectedElement.type && selectedElement.id) {
+            if (selectedElement.type === 'watermark') {
+                setWatermarks(prev => prev.filter(w => w.id !== selectedElement.id));
+                if (watermarks.length <= 1) {
+                    setEnableWatermark(false);
+                }
+            } else {
+                setSignatures(prev => prev.filter(s => s.id !== selectedElement.id));
+                if (signatures.length <= 1) {
+                    setEnableSignature(false);
+                }
+            }
+            setSelectedElement({ type: null, id: null });
+            setFloatingPanelVisible(false);
+            setMoveMode(false);
+        }
+    };
+
+    const handleElementEdit = () => {
+        if (selectedElement.type && selectedElement.id) {
+            setSelectedElementForEdit(selectedElement);
+            if (selectedElement.type === 'watermark') {
+                setShowWatermarkEditor(true);
+            } else {
+                setShowSignatureEditor(true);
+            }
+        }
+    };
+
+    const handleBackgroundClick = () => {
+        setSelectedElement({ type: null, id: null });
+        setFloatingPanelVisible(false);
+        setMoveMode(false);
     };
 
     // Exported functions for QualityPanel
@@ -3654,7 +3792,10 @@ const generateFallbackPreview = () => {
                                 </button>
                             </div>
                         </div>
-                        <div style={{ padding: '10px', height: 'calc(100% - 40px)', overflow: 'hidden', position: 'relative' }}>
+                        <div 
+                            style={{ padding: '10px', height: 'calc(100% - 40px)', overflow: 'hidden', position: 'relative' }}
+                            onClick={handleBackgroundClick}
+                        >
                             <img
                                 src={previewImage}
                                 alt="Floating preview"
@@ -3665,8 +3806,8 @@ const generateFallbackPreview = () => {
                                 }}
                             />
 
-                            {/* Draggable and Resizable Watermark Overlays */}
-                            {enableWatermark && watermarks.map((watermark, index) => (
+                            {/* New Floating Panel System - Watermarks */}
+                            {enableWatermark && watermarks.map((watermark) => (
                                 (watermark.text || watermark.image) && (
                                     <div
                                         key={watermark.id}
@@ -3677,8 +3818,14 @@ const generateFallbackPreview = () => {
                                             width: `${watermark.size.width}px`,
                                             height: `${watermark.size.height}px`,
                                             transform: `translate(-50%, -50%) rotate(${watermark.rotation}deg)`,
-                                            background: activeElement.type === 'watermark' && activeElement.id === watermark.id ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                                            border: activeElement.type === 'watermark' && activeElement.id === watermark.id ? '2px solid #007bff' : '2px dashed rgba(255, 255, 255, 0.5)',
+                                            background: selectedElement.type === 'watermark' && selectedElement.id === watermark.id 
+                                                ? 'rgba(255, 255, 255, 0.4)' 
+                                                : 'rgba(255, 255, 255, 0.1)',
+                                            border: selectedElement.type === 'watermark' && selectedElement.id === watermark.id 
+                                                ? '3px solid #007bff' 
+                                                : moveMode && selectedElement.id === watermark.id 
+                                                    ? '3px solid #28a745' 
+                                                    : '2px dashed rgba(255, 255, 255, 0.5)',
                                             padding: '4px',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -3686,80 +3833,29 @@ const generateFallbackPreview = () => {
                                             fontSize: '12px',
                                             color: 'rgba(255, 255, 255, 0.9)',
                                             userSelect: 'none',
-                                            zIndex: activeElement.type === 'watermark' && activeElement.id === watermark.id ? 1001 : 999,
-                                            cursor: 'move',
-                                            opacity: watermark.opacity / 100
+                                            zIndex: selectedElement.type === 'watermark' && selectedElement.id === watermark.id ? 1001 : 999,
+                                            cursor: moveMode && selectedElement.id === watermark.id ? 'move' : 'pointer',
+                                            opacity: watermark.opacity / 100,
+                                            outline: moveMode && selectedElement.id === watermark.id ? '2px solid #28a745' : 'none',
+                                            outlineOffset: '2px'
                                         }}
-                                    onMouseEnter={() => setActiveControl('watermark')}
-                                    onMouseLeave={() => setActiveControl('')}
-                                    onMouseDown={(e) => {
-                                        if (e.target !== e.currentTarget) return;
-                                        setActiveControl('watermark');
-                                        const container = e.currentTarget.parentElement!;
-                                        const rect = container.getBoundingClientRect();
-
-                                        const handleMouseMove = (e: MouseEvent) => {
-                                            const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
-                                            const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
-
-                                            setWatermarkPosition({
-                                                x: Math.max(10, Math.min(90, x)),
-                                                y: Math.max(10, Math.min(90, y))
-                                            });
-                                        };
-
-                                        const handleMouseUp = () => {
-                                            document.removeEventListener('mousemove', handleMouseMove);
-                                            document.removeEventListener('mouseup', handleMouseUp);
-                                        };
-
-                                        document.addEventListener('mousemove', handleMouseMove);
-                                        document.addEventListener('mouseup', handleMouseUp);
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                    }}
-                                >
-                                    {watermarkImage ? (
-                                        <img src={watermarkImage} alt="Watermark" style={{
-                                            width: '100%',
-                                            height: '100%',
-                                            objectFit: 'contain',
-                                            pointerEvents: 'none'
-                                        }} />
-                                    ) : (
-                                        <span style={{ fontSize: '10px', textAlign: 'center', pointerEvents: 'none' }}>
-                                            {watermarkText || 'Watermark'}
-                                        </span>
-                                    )}
-
-                                    {/* Corner Resize Handles */}
-                                    <div
-                                        style={{
-                                            position: 'absolute',
-                                            bottom: '-6px',
-                                            right: '-6px',
-                                            width: '12px',
-                                            height: '12px',
-                                            background: '#007bff',
-                                            border: '2px solid white',
-                                            borderRadius: '2px',
-                                            cursor: 'nw-resize',
-                                            zIndex: 1002,
-                                            display: activeControl === 'watermark' ? 'block' : 'none'
-                                        }}
-                                        title="Resize"
+                                        onClick={(e) => handleElementClick('watermark', watermark.id, e)}
                                         onMouseDown={(e) => {
-                                            const startSize = { ...watermarkSize };
-                                            const startX = e.clientX;
-                                            const startY = e.clientY;
+                                            if (!moveMode || selectedElement.id !== watermark.id) return;
+                                            e.stopPropagation();
+                                            
+                                            const container = e.currentTarget.parentElement!;
+                                            const rect = container.getBoundingClientRect();
 
                                             const handleMouseMove = (e: MouseEvent) => {
-                                                const deltaX = e.clientX - startX;
-                                                const deltaY = e.clientY - startY;
+                                                const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
+                                                const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
 
-                                                setWatermarkSize({
-                                                    width: Math.max(50, startSize.width + deltaX),
-                                                    height: Math.max(30, startSize.height + deltaY)
+                                                updateWatermark(watermark.id, {
+                                                    position: {
+                                                        x: Math.max(10, Math.min(90, x)),
+                                                        y: Math.max(10, Math.min(90, y))
+                                                    }
                                                 });
                                             };
 
@@ -3770,41 +3866,83 @@ const generateFallbackPreview = () => {
 
                                             document.addEventListener('mousemove', handleMouseMove);
                                             document.addEventListener('mouseup', handleMouseUp);
-                                            e.preventDefault();
-                                            e.stopPropagation();
                                         }}
-                                    />
+                                    >
+                                        {watermark.image ? (
+                                            <img src={watermark.image} alt="Watermark" style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'contain',
+                                                pointerEvents: 'none'
+                                            }} />
+                                        ) : (
+                                            <span style={{ 
+                                                fontSize: `${watermark.fontSize || 24}px`,
+                                                fontFamily: watermark.fontFamily || 'Arial',
+                                                fontWeight: watermark.isBold ? 'bold' : 'normal',
+                                                fontStyle: watermark.isItalic ? 'italic' : 'normal',
+                                                textAlign: watermark.textAlign as any || 'center',
+                                                color: watermark.textColor || '#FFFFFF',
+                                                pointerEvents: 'none'
+                                            }}>
+                                                {watermark.text || 'Watermark'}
+                                            </span>
+                                        )}
+                                    </div>
+                                )
+                            ))}
 
-                                    {/* Rotation Handle */}
+                            {/* New Floating Panel System - Signatures */}
+                            {enableSignature && signatures.map((signature) => (
+                                (signature.text || signature.image) && (
                                     <div
+                                        key={signature.id}
                                         style={{
                                             position: 'absolute',
-                                            top: '-20px',
-                                            left: '50%',
-                                            width: '16px',
-                                            height: '16px',
-                                            background: '#28a745',
-                                            border: '2px solid white',
-                                            borderRadius: '50%',
-                                            cursor: 'grab',
-                                            transform: 'translateX(-50%)',
-                                            zIndex: 1002,
-                                            display: activeControl === 'watermark' ? 'flex' : 'none',
+                                            left: `${signature.position.x}%`,
+                                            top: `${signature.position.y}%`,
+                                            width: `${signature.size.width}px`,
+                                            height: `${signature.size.height}px`,
+                                            transform: `translate(-50%, -50%) rotate(${signature.rotation}deg)`,
+                                            background: selectedElement.type === 'signature' && selectedElement.id === signature.id 
+                                                ? 'rgba(0, 0, 0, 0.4)' 
+                                                : 'rgba(0, 0, 0, 0.1)',
+                                            border: selectedElement.type === 'signature' && selectedElement.id === signature.id 
+                                                ? '3px solid #28a745' 
+                                                : moveMode && selectedElement.id === signature.id 
+                                                    ? '3px solid #007bff' 
+                                                    : '2px dashed rgba(0, 0, 0, 0.5)',
+                                            padding: '4px',
+                                            display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            fontSize: '8px',
-                                            color: 'white'
+                                            fontSize: '12px',
+                                            color: 'rgba(0, 0, 0, 0.9)',
+                                            userSelect: 'none',
+                                            zIndex: selectedElement.type === 'signature' && selectedElement.id === signature.id ? 1001 : 999,
+                                            cursor: moveMode && selectedElement.id === signature.id ? 'move' : 'pointer',
+                                            opacity: signature.opacity / 100,
+                                            outline: moveMode && selectedElement.id === signature.id ? '2px solid #007bff' : 'none',
+                                            outlineOffset: '2px'
                                         }}
-                                        title="Rotate"
+                                        onClick={(e) => handleElementClick('signature', signature.id, e)}
                                         onMouseDown={(e) => {
+                                            if (!moveMode || selectedElement.id !== signature.id) return;
+                                            e.stopPropagation();
+                                            
                                             const container = e.currentTarget.parentElement!;
                                             const rect = container.getBoundingClientRect();
-                                            const centerX = rect.left + rect.width / 2;
-                                            const centerY = rect.top + rect.height / 2;
 
                                             const handleMouseMove = (e: MouseEvent) => {
-                                                const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
-                                                setWatermarkRotation(angle);
+                                                const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
+                                                const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
+
+                                                updateSignature(signature.id, {
+                                                    position: {
+                                                        x: Math.max(10, Math.min(90, x)),
+                                                        y: Math.max(10, Math.min(90, y))
+                                                    }
+                                                });
                                             };
 
                                             const handleMouseUp = () => {
@@ -3814,87 +3952,63 @@ const generateFallbackPreview = () => {
 
                                             document.addEventListener('mousemove', handleMouseMove);
                                             document.addEventListener('mouseup', handleMouseUp);
-                                            e.preventDefault();
-                                            e.stopPropagation();
                                         }}
                                     >
-                                        ↻
+                                        {signature.image ? (
+                                            <img src={signature.image} alt="Signature" style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'contain',
+                                                pointerEvents: 'none'
+                                            }} />
+                                        ) : (
+                                            <span style={{ 
+                                                fontSize: `${signature.fontSize || 18}px`,
+                                                fontFamily: signature.fontFamily || 'cursive',
+                                                fontWeight: signature.isBold ? 'bold' : 'normal',
+                                                fontStyle: signature.isItalic ? 'italic' : 'normal',
+                                                textAlign: signature.textAlign as any || 'center',
+                                                color: signature.textColor || '#000000',
+                                                pointerEvents: 'none'
+                                            }}>
+                                                {signature.text || 'Signature'}
+                                            </span>
+                                        )}
                                     </div>
+                                )
+                            ))}
 
-                                    {/* Delete Button */}
-                                    <div
-                                        style={{
-                                            position: 'absolute',
-                                            top: '-6px',
-                                            right: '-6px',
-                                            width: '12px',
-                                            height: '12px',
-                                            background: '#dc3545',
-                                            border: '2px solid white',
-                                            borderRadius: '50%',
-                                            cursor: 'pointer',
-                                            zIndex: 1002,
-                                            display: activeControl === 'watermark' ? 'flex' : 'none',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '8px',
-                                            color: 'white'
-                                        }}
-                                        title="Delete Watermark"
-                                        onClick={(e) => {
-                                            if (window.confirm('Delete this watermark?')) {
-                                                setWatermarkText('');
-                                                setWatermarkImage('');
-                                                setEnableWatermark(false);
-                                            }
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }}
-                                    >
-                                        ✕
-                                    </div>
-                                </div>
-                            )
-                        ))}
-
-                            {/* Draggable and Resizable Signature Overlay */}
-                            {enableSignature && (signatureText || signatureImage) && (
+                            {/* Floating Control Panel */}
+                            {floatingPanelVisible && selectedElement.type && selectedElement.id && (
                                 <div
                                     style={{
                                         position: 'absolute',
-                                        left: `${signaturePosition.x}%`,
-                                        top: `${signaturePosition.y}%`,
-                                        width: `${signatureSize.width}px`,
-                                        height: `${signatureSize.height}px`,
-                                        transform: `translate(-50%, -50%) rotate(${signatureRotation}deg)`,
-                                        background: activeElement.type === 'signature' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)',
-                                        border: activeElement.type === 'signature' ? '2px solid #28a745' : '2px dashed rgba(0, 0, 0, 0.5)',
-                                        padding: '4px',
+                                        left: `${floatingPanelPosition.x}px`,
+                                        top: `${floatingPanelPosition.y}px`,
+                                        background: 'rgba(40, 44, 52, 0.95)',
+                                        border: '2px solid #007bff',
+                                        borderRadius: '10px',
+                                        padding: '12px',
                                         display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: '12px',
-                                        color: 'rgba(0, 0, 0, 0.9)',
+                                        flexDirection: 'column',
+                                        gap: '8px',
+                                        minWidth: '240px',
+                                        maxWidth: '280px',
+                                        zIndex: 2000,
+                                        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.4)',
                                         userSelect: 'none',
-                                        zIndex: activeElement.type === 'signature' ? 1001 : 999,
-                                        cursor: 'move',
-                                        opacity: signatureOpacity / 100
+                                        backdropFilter: 'blur(10px)',
+                                        cursor: 'default'
                                     }}
-                                    onMouseEnter={() => setActiveControl('signature')}
-                                    onMouseLeave={() => setActiveControl('')}
+                                    onClick={(e) => e.stopPropagation()}
                                     onMouseDown={(e) => {
-                                        if (e.target !== e.currentTarget) return;
-                                        setActiveControl('signature');
-                                        const container = e.currentTarget.parentElement!;
-                                        const rect = container.getBoundingClientRect();
+                                        const startX = e.clientX - floatingPanelPosition.x;
+                                        const startY = e.clientY - floatingPanelPosition.y;
 
                                         const handleMouseMove = (e: MouseEvent) => {
-                                            const x = ((e.clientX - rect.left - 10) / (rect.width - 20)) * 100;
-                                            const y = ((e.clientY - rect.top - 10) / (rect.height - 20)) * 100;
-
-                                            setSignaturePosition({
-                                                x: Math.max(10, Math.min(90, x)),
-                                                y: Math.max(10, Math.min(90, y))
+                                            setFloatingPanelPosition({
+                                                x: e.clientX - startX,
+                                                y: e.clientY - startY
                                             });
                                         };
 
@@ -3905,110 +4019,189 @@ const generateFallbackPreview = () => {
 
                                         document.addEventListener('mousemove', handleMouseMove);
                                         document.addEventListener('mouseup', handleMouseUp);
-                                        e.preventDefault();
-                                        e.stopPropagation();
                                     }}
                                 >
-                                    {signatureImage ? (
-                                        <img src={signatureImage} alt="Signature" style={{
-                                            width: '100%',
-                                            height: '100%',
-                                            objectFit: 'contain',
-                                            pointerEvents: 'none'
-                                        }} />
-                                    ) : (
-                                        <span style={{ fontSize: '10px', textAlign: 'center', fontStyle: 'italic', pointerEvents: 'none' }}>
-                                            {signatureText || 'Signature'}
+                                    {/* Panel Header */}
+                                    <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+                                        paddingBottom: '6px',
+                                        marginBottom: '4px'
+                                    }}>
+                                        <span style={{ 
+                                            color: '#007bff', 
+                                            fontSize: '14px', 
+                                            fontWeight: 'bold',
+                                            textTransform: 'capitalize'
+                                        }}>
+                                            {selectedElement.type} Controls
                                         </span>
-                                    )}
+                                        <button
+                                            onClick={() => {
+                                                setFloatingPanelVisible(false);
+                                                setSelectedElement({ type: null, id: null });
+                                                setMoveMode(false);
+                                            }}
+                                            style={{
+                                                background: 'transparent',
+                                                border: 'none',
+                                                color: '#ff6b6b',
+                                                fontSize: '16px',
+                                                cursor: 'pointer',
+                                                padding: '2px'
+                                            }}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
 
-                                    {/* Corner Resize Handle */}
-                                    <div
-                                        style={{
-                                            position: 'absolute',
-                                            bottom: '-6px',
-                                            right: '-6px',
-                                            width: '12px',
-                                            height: '12px',
-                                            background: '#28a745',
-                                            border: '2px solid white',
-                                            borderRadius: '2px',
-                                            cursor: 'nw-resize',
-                                            zIndex: 1002,
-                                            display: activeControl === 'signature' ? 'block' : 'none'
-                                        }}
-                                        title="Resize"
-                                        onMouseDown={(e) => {
-                                            const startSize = { ...signatureSize };
-                                            const startX = e.clientX;
-                                            const startY = e.clientY;
+                                    {/* Control Buttons Row 1 */}
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        {/* ① Move Button */}
+                                        <button
+                                            onClick={handleMoveToggle}
+                                            style={{
+                                                flex: 1,
+                                                background: moveMode ? '#28a745' : '#6c757d',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                padding: '8px',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px',
+                                                fontWeight: '500'
+                                            }}
+                                            title={moveMode ? 'Lock Position' : 'Enable Move Mode'}
+                                        >
+                                            {moveMode ? '🔒' : '📐'} {moveMode ? 'Lock' : 'Move'}
+                                        </button>
 
-                                            const handleMouseMove = (e: MouseEvent) => {
-                                                const deltaX = e.clientX - startX;
-                                                const deltaY = e.clientY - startY;
+                                        {/* ④ Delete Button */}
+                                        <button
+                                            onClick={handleElementDelete}
+                                            style={{
+                                                flex: 1,
+                                                background: '#dc3545',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                padding: '8px',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px',
+                                                fontWeight: '500'
+                                            }}
+                                            title="Delete Element"
+                                        >
+                                            🗑️ Delete
+                                        </button>
+                                    </div>
 
-                                                setSignatureSize({
-                                                    width: Math.max(50, startSize.width + deltaX),
-                                                    height: Math.max(30, startSize.height + deltaY)
-                                                });
-                                            };
+                                    {/* ② Resize Slider */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <label style={{ color: 'white', fontSize: '12px', fontWeight: '500' }}>
+                                            📏 Size: {Math.round(((selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)?.size.width 
+                                                : signatures.find(s => s.id === selectedElement.id)?.size.width) || 200) / 2)}%
+                                        </label>
+                                        <input
+                                            type="range"
+                                            min="50"
+                                            max="200"
+                                            value={((selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)?.size.width 
+                                                : signatures.find(s => s.id === selectedElement.id)?.size.width) || 200) / 2}
+                                            onChange={(e) => handleElementResize(parseInt(e.target.value))}
+                                            style={{
+                                                width: '100%',
+                                                accentColor: '#007bff'
+                                            }}
+                                        />
+                                    </div>
 
-                                            const handleMouseUp = () => {
-                                                document.removeEventListener('mousemove', handleMouseMove);
-                                                document.removeEventListener('mouseup', handleMouseUp);
-                                            };
+                                    {/* ③ Rotate Dial */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <label style={{ color: 'white', fontSize: '12px', fontWeight: '500' }}>
+                                            🔄 Rotate:
+                                        </label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="360"
+                                            value={selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)?.rotation || 0
+                                                : signatures.find(s => s.id === selectedElement.id)?.rotation || 0}
+                                            onChange={(e) => handleElementRotate(parseInt(e.target.value))}
+                                            style={{
+                                                flex: 1,
+                                                accentColor: '#28a745'
+                                            }}
+                                        />
+                                        <span style={{ color: 'white', fontSize: '11px', minWidth: '35px' }}>
+                                            {Math.round(selectedElement.type === 'watermark' 
+                                                ? watermarks.find(w => w.id === selectedElement.id)?.rotation || 0
+                                                : signatures.find(s => s.id === selectedElement.id)?.rotation || 0)}°
+                                        </span>
+                                    </div>
 
-                                            document.addEventListener('mousemove', handleMouseMove);
-                                            document.addEventListener('mouseup', handleMouseUp);
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }}
-                                    />
+                                    {/* Control Buttons Row 2 */}
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        {/* ⑤ Edit Button */}
+                                        <button
+                                            onClick={handleElementEdit}
+                                            style={{
+                                                flex: 1,
+                                                background: '#17a2b8',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                padding: '8px',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px',
+                                                fontWeight: '500'
+                                            }}
+                                            title="Edit Properties"
+                                        >
+                                            ✏️ Edit
+                                        </button>
 
-                                    {/* Rotation Handle */}
-                                    <div
-                                        style={{
-                                            position: 'absolute',
-                                            top: '-20px',
-                                            left: '50%',
-                                            width: '16px',
-                                            height: '16px',
-                                            background: '#dc3545',
-                                            border: '2px solid white',
-                                            borderRadius: '50%',
-                                            cursor: 'grab',
-                                            transform: 'translateX(-50%)',
-                                            zIndex: 1002,
-                                            display: activeControl === 'signature' ? 'flex' : 'none',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '8px',
-                                            color: 'white'
-                                        }}
-                                        title="Rotate"
-                                        onMouseDown={(e) => {
-                                            const container = e.currentTarget.parentElement!;
-                                            const rect = container.getBoundingClientRect();
-                                            const centerX = rect.left + rect.width / 2;
-                                            const centerY = rect.top + rect.height / 2;
-
-                                            const handleMouseMove = (e: MouseEvent) => {
-                                                const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
-                                                setSignatureRotation(angle);
-                                            };
-
-                                            const handleMouseUp = () => {
-                                                document.removeEventListener('mousemove', handleMouseMove);
-                                                document.removeEventListener('mouseup', handleMouseUp);
-                                            };
-
-                                            document.addEventListener('mousemove', handleMouseMove);
-                                            document.addEventListener('mouseup', handleMouseUp);
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                        }}
-                                    >
-                                        ↻
+                                        {/* ⑥ Undo Button */}
+                                        <button
+                                            onClick={() => selectedElement.type && selectedElement.id && undoElementChange(selectedElement.type, selectedElement.id)}
+                                            style={{
+                                                flex: 1,
+                                                background: '#6f42c1',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                padding: '8px',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px',
+                                                fontWeight: '500',
+                                                opacity: (elementHistory.get(`${selectedElement.type}-${selectedElement.id}`)?.length || 0) > 0 ? 1 : 0.5
+                                            }}
+                                            disabled={(elementHistory.get(`${selectedElement.type}-${selectedElement.id}`)?.length || 0) === 0}
+                                            title="Undo Last Change"
+                                        >
+                                            ↶ Undo
+                                        </button>
                                     </div>
                                 </div>
                             )}
