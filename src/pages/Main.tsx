@@ -602,13 +602,12 @@ function Main({ appName, aboutText } :any) {
     // Tab management
     const [tabs, setTabs] = useState<CropTab[]>([{
         id: 'tab-1',
-        name: 'Crop Session 1',
+        name: 'Session 1',
         files: [],
         crops: {},
         settings: {
             cropSize: null,
-            keepRatio: true,
-            resizeOnExport: true,
+            keepRatio: falseSession       resizeOnExport: true,
             lockMovement: true,
             centerCrop: false,
             enableOCR: false
