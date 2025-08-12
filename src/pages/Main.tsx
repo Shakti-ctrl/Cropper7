@@ -6,6 +6,7 @@ import About from "../component/About";
 import AdjustmentsPanel from "../component/AdjustmentsPanel";
 import EffectFilters from "../component/EffectFilters";
 import QualityPanel from "../component/QualityPanel";
+import A2HSButton from "../A2HSButton";
 
 // Helper function for async image loading
 const loadImageAsync = (src: string): Promise<HTMLImageElement> => {
@@ -382,6 +383,17 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                             <div>• <strong>Escape</strong> - Clear Selection</div>
                         </div>
                     </div>
+                </div>
+
+                {/* PWA Install Button - Always visible, maintaining desktop layout */}
+                <div style={{
+                    width: "100%",
+                    display: "flex",
+                    justifyContent: "center",
+                    marginTop: "25px",
+                    padding: "0 20px"
+                }}>
+                    <A2HSButton />
                 </div>
             </div>
         </div>
