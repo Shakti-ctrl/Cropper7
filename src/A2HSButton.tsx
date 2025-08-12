@@ -17,7 +17,7 @@ const A2HSButton = () => {
                     console.log(app.platform, app.url);
                     if (
                         app.url ===
-                        "https://aakash-seven.vercel.app/manifest.json"
+                        "https://cropper7.vercel.app/manifest.json"
                     ) {
                         installed = true;
                     }
