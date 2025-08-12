@@ -18,11 +18,11 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": "/batch-images-cropper/",
+  "start_url": "/",
   "display": "standalone",
   "theme_color": "#000000",
   "background_color": "#ffffff",
-  "scope": "/batch-images-cropper/",
+  "scope": "/",
   "related_applications": [
     {
       "platform": "webapp",
