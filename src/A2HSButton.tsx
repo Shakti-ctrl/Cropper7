@@ -34,25 +34,8 @@ const A2HSButton = () => {
         }
     }
 
-    // Always render the button regardless of installability status
-    return <button 
-        className="a2hsButton" 
-        onClick={handleAddToHomeScreenClick} 
-        title="Installing this will allow you to use it offline"
-        style={{
-            background: 'linear-gradient(135deg, #4CAF50, #45a049)',
-            color: 'white',
-            border: 'none',
-            padding: '12px 24px',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-            transition: 'all 0.3s ease'
-        }}
-    >
-        📦 Install as PWA
+    return <button className="a2hsButton" onClick={handleAddToHomeScreenClick} title="Installing this will allow you to use it offline">
+        📦 Install as a PWA
     </button>
 }
 
