@@ -609,9 +609,9 @@ function Main({ appName, aboutText } :any) {
             cropSize: null,
             keepRatio: true,
             resizeOnExport: true,
-            lockMovement: false,
+            lockMovement: true,
             centerCrop: false,
-            enableOCR: true
+            enableOCR: false
         },
         isActive: true
     }]);
@@ -635,6 +635,7 @@ function Main({ appName, aboutText } :any) {
     const [gridView, setGridView] = useState(true);
     const [currentView, setCurrentView] = useState<'crop' | 'history'>('crop');
     const [activeControl, setActiveControl] = useState<string>(''); // 'watermark', 'signature', 'border', or ''
+    const [zoomLevel, setZoomLevel] = useState<number>(100); // Default zoom level 100%
 
     // State for floating images and zoom functionality
     const [floatingImages, setFloatingImages] = useState<{ [key: number]: { position: { x: number, y: number }, size: { width: number, height: number }, visible: boolean } }>({});
@@ -880,9 +881,9 @@ function Main({ appName, aboutText } :any) {
                 cropSize: null,
                 keepRatio: true,
                 resizeOnExport: true,
-                lockMovement: false,
+                lockMovement: true,
                 centerCrop: false,
-                enableOCR: true
+                enableOCR: false
             },
             isActive: true
         };
@@ -3301,11 +3302,30 @@ const generateFallbackPreview = () => {
                 {currentView === 'crop' && (
                     <>
                         <div className="top-header" style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 20px", background: "linear-gradient(135deg, rgba(0, 20, 40, 0.9), rgba(0, 40, 80, 0.7))", borderBottom: "1px solid rgba(0, 255, 255, 0.2)"}}>
-                            <div style={{display: "flex", alignItems: "center", gap: "10px", color: "#00bfff", fontSize: "14px"}}>
+                            <div style={{display: "flex", alignItems: "center", gap: "15px", color: "#00bfff", fontSize: "14px"}}>
                                 <span>📊 {files.length} files ({getTotalFileSize()}) • ✂️ {getProcessedCount()} cropped</span>
                                 {selectedFiles.size > 0 && (
                                     <span style={{color: "#4CAF50"}}>✓ {selectedFiles.size} selected</span>
                                 )}
+                                <div style={{display: "flex", alignItems: "center", gap: "8px", color: "#00bfff"}}>
+                                    <span style={{fontSize: "12px", minWidth: "40px"}}>🔍 {zoomLevel}%</span>
+                                    <input
+                                        type="range"
+                                        min="50"
+                                        max="200"
+                                        value={zoomLevel}
+                                        onChange={(e) => setZoomLevel(parseInt(e.target.value))}
+                                        style={{
+                                            width: "80px",
+                                            height: "4px",
+                                            background: "linear-gradient(to right, #00ffff, #0080ff)",
+                                            borderRadius: "2px",
+                                            outline: "none",
+                                            cursor: "pointer"
+                                        }}
+                                        title="Zoom Level"
+                                    />
+                                </div>
                             </div>
                             <div style={{display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap"}}>
                                 <button onClick={onSelectSomeFiles} className="button" title="Ctrl+O">🖼️ Add Files</button>
@@ -3473,7 +3493,7 @@ const generateFallbackPreview = () => {
                         <div>
                             <div style={{
                                 display: gridView ? "grid" : "flex",
-                                gridTemplateColumns: gridView ? "repeat(auto-fit, minmax(300px, 1fr))" : "none",
+                                gridTemplateColumns: gridView ? `repeat(auto-fit, minmax(${300 * (zoomLevel / 100)}px, 1fr))` : "none",
                                 flexWrap: gridView ? "nowrap" : "wrap",
                                 gap: "0.5rem",
                                 padding: "0.5rem",
@@ -3481,7 +3501,9 @@ const generateFallbackPreview = () => {
                                 maxWidth: gridView ? "none" : "none",
                                 margin: gridView ? "0" : "0",
                                 height: gridView ? "calc(100vh - 380px)" : "auto", // Adjusted height to fit content
-                                overflowY: gridView ? "auto" : "visible"
+                                overflowY: gridView ? "auto" : "visible",
+                                transform: `scale(${zoomLevel / 100})`,
+                                transformOrigin: "top left"
                             }}>
                                 {files.length === 0 && (
                                     <About aboutText={aboutText} appName={appName}>
