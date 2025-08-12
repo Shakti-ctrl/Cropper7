@@ -607,7 +607,8 @@ function Main({ appName, aboutText } :any) {
         crops: {},
         settings: {
             cropSize: null,
-            keepRatio: falseSession       resizeOnExport: true,
+            keepRatio: false,
+            resizeOnExport: true,
             lockMovement: true,
             centerCrop: false,
             enableOCR: false
