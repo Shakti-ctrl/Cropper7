@@ -6,6 +6,7 @@ import About from "../component/About";
 import AdjustmentsPanel from "../component/AdjustmentsPanel";
 import EffectFilters from "../component/EffectFilters";
 import QualityPanel from "../component/QualityPanel";
+import A2HSButton from "../A2HSButton";
 
 // Helper function for async image loading
 const loadImageAsync = (src: string): Promise<HTMLImageElement> => {
@@ -382,6 +383,15 @@ const WelcomePageWithTools = ({ onSelectSomeFiles, onSelectFolder }: { onSelectS
                             <div>• <strong>Escape</strong> - Clear Selection</div>
                         </div>
                     </div>
+                </div>
+
+                    {/* PWA Install Button */}
+                    <div style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        marginTop: "20px"
+                    }}>
+                        <A2HSButton />
                 </div>
             </div>
         </div>
@@ -3526,9 +3536,9 @@ const generateFallbackPreview = () => {
                                                          cursor: rearrangeMode ? "grab" : "default",
                                                          opacity: rearrangeMode && draggedIndex === actualIndex ? 0.5 : 1,
                                                          transform: isZoomed ? "scale(1.2)" : "scale(1)",
-                                                         transition: "all 0.3s ease",
+                                                         transition: "transform 0.3s ease, opacity 0.3s ease",
                                                          background: rearrangeMode ? "rgba(33, 150, 243, 0.1)" : "transparent",
-                                                         transformOrigin: "center",
+                                                         transformOrigin: "center center",
                                                          zIndex: isZoomed ? 1000 : 1,
                                                          borderBottomLeftRadius: isSelected ? "10px" : "0.5rem", // Custom border for selection
                                                          borderBottomRightRadius: isSelected ? "10px" : "0.5rem",
