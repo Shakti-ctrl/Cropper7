@@ -2697,7 +2697,7 @@ const generateFallbackPreview = () => {
                             if (extractedText && extractedText.length > 0) {
                                 const cleanText = extractedText.replace(/\s+/g, ' ').trim();
                                 pdf.setFontSize(8);
-                                pdf.setTextColor(0, 0, 0, 0.01);
+                                pdf.setTextColor(0, 0, 0, 0.00001);
 
                                 const maxCharsPerLine = 80;
                                 const lines = [];
