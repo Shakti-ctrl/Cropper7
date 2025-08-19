@@ -1239,86 +1239,34 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               <button
                 onClick={async () => {
                   if (pages.length === 0) {
-                    alert('🚨 Please add some pages first before sharing!');
+                    alert('No pages to share');
                     return;
                   }
 
-                  const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
-
-                  try {
-                    updateProcessingJob(jobId, { message: 'Creating shareable PDF...' });
-
-                    const pdfDoc = await PDFDocument.create();
-                    const sortedPages = pages.sort((a, b) => a.order - b.order);
-
-                    for (let i = 0; i < sortedPages.length; i++) {
-                      const page = sortedPages[i];
-                      updateProcessingJob(jobId, {
-                        progress: i,
-                        message: `Processing page ${i + 1}/${sortedPages.length}`
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: `${activeSession.name} - PDF Master`,
+                        text: `Check out my PDF presentation with ${pages.length} pages created using PDF Master!`,
+                        url: window.location.href
                       });
-
-                      const canvas = document.createElement('canvas');
-                      const ctx = canvas.getContext('2d')!;
-
-                      canvas.width = page.crop.width;
-                      canvas.height = page.crop.height;
-
-                      const img = new Image();
-                      img.src = page.imageData;
-                      await new Promise((resolve) => { img.onload = resolve; });
-
-                      ctx.save();
-                      if (page.rotation !== 0) {
-                        const centerX = canvas.width / 2;
-                        const centerY = canvas.height / 2;
-                        ctx.translate(centerX, centerY);
-                        ctx.rotate((page.rotation * Math.PI) / 180);
-                        ctx.translate(-centerX, -centerY);
-                      }
-                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                      ctx.restore();
-
-                      const imageBytes = canvas.toDataURL('image/png');
-                      const pngImage = await pdfDoc.embedPng(imageBytes);
-                      const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
-                      pdfPage.drawImage(pngImage, {
-                        x: 0,
-                        y: 0,
-                        width: canvas.width,
-                        height: canvas.height
-                      });
+                    } catch (error) {
+                      console.log('Share cancelled or failed:', error);
                     }
+                  } else {
+                    const shareText = `Check out my PDF presentation "${activeSession.name}" with ${pages.length} pages created using PDF Master! ${window.location.href}`;
 
-                    updateProcessingJob(jobId, { message: 'Finalizing PDF for sharing...' });
-                    const pdfBytes = await pdfDoc.save();
-                    const filename = `${activeSession.name.replace(/\s+/g, '_')}_enhanced.pdf`;
-
-                    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-
-                    if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
+                    if (navigator.clipboard) {
                       try {
-                        await navigator.share({
-                          title: '🎨 Enhanced PDF from PDF Master',
-                          text: `Check out my enhanced PDF "${activeSession.name}" with ${pages.length} pages created using PDF Master!`,
-                          files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
-                        });
-                        completeProcessingJob(jobId, 'completed', '📄 PDF shared successfully!');
-                      } catch (shareError: any) {
-                        if (shareError.name !== 'AbortError') {
-                          console.log('Share failed:', shareError);
-                          completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
-                        } else {
-                          completeProcessingJob(jobId, 'completed', 'Share cancelled');
-                        }
+                        await navigator.clipboard.writeText(shareText);
+                        alert('Share text copied to clipboard!');
+                      } catch (error) {
+                        console.error('Failed to copy to clipboard:', error);
+                        prompt('Copy this text to share:', shareText);
                       }
                     } else {
-                      // Fallback - just show message, no auto download (exactly like cropper)
-                      completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
+                      prompt('Copy this text to share:', shareText);
                     }
-                  } catch (error) {
-                    console.error('Error creating shareable PDF:', error);
-                    completeProcessingJob(jobId, 'error', 'Error creating shareable PDF');
                   }
                 }}
                 style={{
@@ -1334,9 +1282,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 📲 Share Enhanced PDF
               </button>
-              <div className="share-info" style={{ marginTop: '5px' }}>
-                <small style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '11px' }}>📋 Share without downloading to device</small>
-              </div>
             </>
           )}
         </div>
