@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
 
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// Set up PDF.js worker - use local worker to avoid CDN issues
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
 
 interface PDFPage {
   id: string;
@@ -40,6 +40,10 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
+  
+  // Floating and zoom functionality (copied from cropper)
+  const [floatingPages, setFloatingPages] = useState<{[key: string]: {visible: boolean, position: {x: number, y: number}, size: {width: number, height: number}}}>({});
+  const [zoomedPages, setZoomedPages] = useState<Set<string>>(new Set());
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -385,6 +389,50 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     setSelectedPages(new Set());
   };
 
+  // Floating functionality (copied from Main.tsx cropper)
+  const toggleFloating = (pageId: string) => {
+    setFloatingPages(prev => {
+      const isCurrentlyFloating = prev[pageId]?.visible || false;
+      
+      if (isCurrentlyFloating) {
+        // Close floating
+        return {
+          ...prev,
+          [pageId]: { ...prev[pageId], visible: false }
+        };
+      } else {
+        // Open floating
+        return {
+          ...prev,
+          [pageId]: {
+            visible: true,
+            position: { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 },
+            size: { width: 400, height: 500 }
+          }
+        };
+      }
+    });
+  };
+
+  const closeFloatingPage = (pageId: string) => {
+    setFloatingPages(prev => ({
+      ...prev,
+      [pageId]: { ...prev[pageId], visible: false }
+    }));
+  };
+
+  const toggleZoom = (pageId: string) => {
+    setZoomedPages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pageId)) {
+        newSet.delete(pageId);
+      } else {
+        newSet.add(pageId);
+      }
+      return newSet;
+    });
+  };
+
   if (!isVisible) return null;
 
   return (
@@ -678,11 +726,13 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       width: '100%',
                       height: '100%',
                       objectFit: 'contain',
-                      transform: `rotate(${page.rotation}deg)`
+                      transform: `rotate(${page.rotation}deg) ${zoomedPages.has(page.id) ? 'scale(1.2)' : 'scale(1)'}`,
+                      transition: 'transform 0.3s ease',
+                      cursor: zoomedPages.has(page.id) ? 'zoom-out' : 'zoom-in'
                     }}
                   />
                   
-                  {/* Page controls */}
+                  {/* Page controls - top right */}
                   <div style={{
                     position: 'absolute',
                     top: '8px',
@@ -745,6 +795,85 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       🗑️
                     </button>
                   </div>
+
+                  {/* Floating Image Controls (balloon and zoom) - bottom right */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    right: '8px',
+                    zIndex: 10,
+                    display: 'flex',
+                    gap: '5px'
+                  }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFloating(page.id);
+                      }}
+                      style={{
+                        background: floatingPages[page.id]?.visible ? "#f44336" : "#2196F3",
+                        border: "none",
+                        color: "white",
+                        padding: "4px 8px",
+                        borderRadius: "50%",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "28px",
+                        height: "28px",
+                        boxShadow: "0 2px 5px rgba(0,0,0,0.3)"
+                      }}
+                      title={floatingPages[page.id]?.visible ? "Close floating view" : "Open floating view"}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = "scale(1.1)";
+                        e.currentTarget.style.background = floatingPages[page.id]?.visible ? 
+                          "linear-gradient(135deg, #d32f2f, #c62828)" : 
+                          "linear-gradient(135deg, #1976D2, #1565C0)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "scale(1)";
+                        e.currentTarget.style.background = floatingPages[page.id]?.visible ? "#f44336" : "#2196F3";
+                      }}
+                    >
+                      🎈
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleZoom(page.id);
+                      }}
+                      style={{
+                        background: zoomedPages.has(page.id) ? "#FFEB3B" : "#9C27B0",
+                        color: zoomedPages.has(page.id) ? "#333" : "white",
+                        border: "none",
+                        padding: "4px 8px",
+                        borderRadius: "50%",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "28px",
+                        height: "28px",
+                        boxShadow: "0 2px 5px rgba(0,0,0,0.3)"
+                      }}
+                      title={zoomedPages.has(page.id) ? "Disable zoom" : "Enable zoom"}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = "scale(1.1)";
+                        e.currentTarget.style.background = zoomedPages.has(page.id) ? 
+                          "linear-gradient(135deg, #FDD835, #F9A825)" : 
+                          "linear-gradient(135deg, #7B1FA2, #6A1B9A)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "scale(1)";
+                        e.currentTarget.style.background = zoomedPages.has(page.id) ? "#FFEB3B" : "#9C27B0";
+                      }}
+                    >
+                      🔍
+                    </button>
+                  </div>
                   
                   {/* Page number */}
                   <div style={{
@@ -801,6 +930,159 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         style={{ display: 'none' }}
         onChange={handleImageUpload}
       />
+
+      {/* Floating Pages Windows */}
+      {Object.entries(floatingPages).map(([pageId, data]) =>
+        data.visible && (
+          <div
+            key={`floating-${pageId}`}
+            style={{
+              position: 'fixed',
+              left: data.position.x,
+              top: data.position.y,
+              width: data.size.width,
+              height: data.size.height,
+              background: 'white',
+              border: '2px solid #28a745',
+              borderRadius: '8px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              zIndex: 1000,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              background: '#28a745',
+              color: 'white',
+              padding: '8px 12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'move'
+            }}>
+              <span style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                Floating Page {pages.findIndex(p => p.id === pageId) + 1}
+              </span>
+              <button
+                onClick={() => closeFloatingPage(pageId)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  padding: '0',
+                  width: '20px',
+                  height: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ 
+              flex: 1, 
+              overflow: 'hidden', 
+              display: 'flex', 
+              flexDirection: 'column',
+              background: '#f9f9f9'
+            }}>
+              {(() => {
+                const page = pages.find(p => p.id === pageId);
+                if (!page) return <div>Page not found</div>;
+                
+                return (
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '10px'
+                  }}>
+                    <img
+                      src={page.imageData}
+                      alt={page.name || 'Page'}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain',
+                        transform: `rotate(${page.rotation}deg) ${zoomedPages.has(pageId) ? 'scale(1.3)' : 'scale(1)'}`,
+                        transition: 'transform 0.3s ease',
+                        borderRadius: '4px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      }}
+                    />
+                  </div>
+                );
+              })()}
+              
+              {/* Control buttons at bottom */}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-around', 
+                padding: '8px', 
+                background: '#f0f0f0',
+                borderTop: '1px solid #ddd'
+              }}>
+                <button
+                  onClick={() => {
+                    const page = pages.find(p => p.id === pageId);
+                    if (page) rotatePage(page.id, 'left');
+                  }}
+                  style={{
+                    background: "#007bff",
+                    color: "white",
+                    border: "none",
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px"
+                  }}
+                >
+                  ↺ Rotate Left
+                </button>
+                <button
+                  onClick={() => {
+                    const page = pages.find(p => p.id === pageId);
+                    if (page) rotatePage(page.id, 'right');
+                  }}
+                  style={{
+                    background: "#007bff",
+                    color: "white",
+                    border: "none",
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px"
+                  }}
+                >
+                  ↻ Rotate Right
+                </button>
+                <button
+                  onClick={() => toggleZoom(pageId)}
+                  style={{
+                    background: zoomedPages.has(pageId) ? "#FFEB3B" : "#9C27B0",
+                    color: zoomedPages.has(pageId) ? "#333" : "white",
+                    border: "none",
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px"
+                  }}
+                >
+                  🔍 {zoomedPages.has(pageId) ? "Zoom Out" : "Zoom In"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      )}
     </div>
   );
 };
