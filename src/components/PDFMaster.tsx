@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
 
-// Set up PDF.js worker - use local worker to avoid CDN issues
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
+// Configure PDF.js with proper worker version
+if (typeof window !== 'undefined') {
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js`;
+}
 
 interface PDFPage {
   id: string;
@@ -302,12 +304,12 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             updateProcessingJob(jobId, { message: `Loading PDF: ${file.name}` });
             const arrayBuffer = await file.arrayBuffer();
 
-            // Configure PDF.js to use local worker
+            // Robust PDF.js configuration
             const loadingTask = pdfjs.getDocument({
               data: arrayBuffer,
-              useWorkerFetch: false,
-              isEvalSupported: false,
-              useSystemFonts: true
+              cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/cmaps/',
+              cMapPacked: true,
+              standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/standard_fonts/'
             });
 
             const pdf = await loadingTask.promise;
