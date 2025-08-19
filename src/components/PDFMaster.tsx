@@ -713,49 +713,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           </button>
 
           <button
-            onClick={() => {
-              // Create folder upload input
-              const folderInput = document.createElement('input');
-              folderInput.type = 'file';
-              folderInput.webkitdirectory = true;
-              folderInput.multiple = true;
-              folderInput.accept = 'image/*';
-              folderInput.style.display = 'none';
-              
-              folderInput.onchange = (e) => {
-                const target = e.target as HTMLInputElement;
-                if (target.files) {
-                  // Convert FileList to File array and trigger handleImageUpload
-                  const event = {
-                    target: {
-                      files: target.files,
-                      value: ''
-                    }
-                  } as React.ChangeEvent<HTMLInputElement>;
-                  handleImageUpload(event);
-                }
-                document.body.removeChild(folderInput);
-              };
-              
-              document.body.appendChild(folderInput);
-              folderInput.click();
-            }}
-            disabled={isCurrentSessionProcessing}
-            style={{
-              background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '10px 16px',
-              color: 'white',
-              cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              opacity: isCurrentSessionProcessing ? 0.7 : 1
-            }}
-          >
-            📂 Upload Folder
-          </button>
-
-          <button
             onClick={() => pdfInputRef.current?.click()}
             disabled={isCurrentSessionProcessing}
             style={{
@@ -1286,71 +1243,30 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     return;
                   }
 
-                  try {
-                    // Create actual PDF like in cropper's share functionality
-                    const pdfDoc = await PDFDocument.create();
-                    const sortedPages = pages.sort((a, b) => a.order - b.order);
-
-                    for (let i = 0; i < sortedPages.length; i++) {
-                      const page = sortedPages[i];
-
-                      const canvas = document.createElement('canvas');
-                      const ctx = canvas.getContext('2d')!;
-
-                      canvas.width = page.crop.width;
-                      canvas.height = page.crop.height;
-
-                      const img = new Image();
-                      img.src = page.imageData;
-                      await new Promise((resolve) => { img.onload = resolve; });
-
-                      ctx.save();
-                      if (page.rotation !== 0) {
-                        const centerX = canvas.width / 2;
-                        const centerY = canvas.height / 2;
-                        ctx.translate(centerX, centerY);
-                        ctx.rotate((page.rotation * Math.PI) / 180);
-                        ctx.translate(-centerX, -centerY);
-                      }
-                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                      ctx.restore();
-
-                      const imageBytes = canvas.toDataURL('image/png');
-                      const pngImage = await pdfDoc.embedPng(imageBytes);
-                      const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
-                      pdfPage.drawImage(pngImage, {
-                        x: 0,
-                        y: 0,
-                        width: canvas.width,
-                        height: canvas.height
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: `${activeSession.name} - PDF Master`,
+                        text: `Check out my PDF presentation with ${pages.length} pages created using PDF Master!`,
+                        url: window.location.href
                       });
+                    } catch (error) {
+                      console.log('Share cancelled or failed:', error);
                     }
+                  } else {
+                    const shareText = `Check out my PDF presentation "${activeSession.name}" with ${pages.length} pages created using PDF Master! ${window.location.href}`;
 
-                    const pdfBytes = await pdfDoc.save();
-                    const filename = `${activeSession.name.replace(/\s+/g, '_')}_enhanced_${new Date().toISOString().slice(0, 10)}.pdf`;
-                    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-
-                    if (navigator.share && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
+                    if (navigator.clipboard) {
                       try {
-                        await navigator.share({
-                          title: '🎨 Enhanced PDF from PDF Master',
-                          text: `Check out my enhanced PDF with ${pages.length} pages!`,
-                          files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
-                        });
-                        alert('📄 PDF shared successfully!');
-                      } catch (shareError: any) {
-                        if (shareError.name !== 'AbortError') {
-                          console.log('Share failed:', shareError);
-                          alert(`📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
-                        }
+                        await navigator.clipboard.writeText(shareText);
+                        alert('Share text copied to clipboard!');
+                      } catch (error) {
+                        console.error('Failed to copy to clipboard:', error);
+                        prompt('Copy this text to share:', shareText);
                       }
                     } else {
-                      // Just show message - no auto download, exactly like cropper
-                      alert(`📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
+                      prompt('Copy this text to share:', shareText);
                     }
-                  } catch (error) {
-                    console.error('Error creating PDF for sharing:', error);
-                    alert('Error creating PDF for sharing');
                   }
                 }}
                 style={{
@@ -1466,7 +1382,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               Upload images to create a PDF document or upload an existing PDF to edit its pages. 
               You can rotate, crop, reorder, and manipulate pages with full control.
             </p>
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '16px' }}>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 style={{
@@ -1482,46 +1398,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 }}
               >
                 📁 Upload Images
-              </button>
-              <button
-                onClick={() => {
-                  const folderInput = document.createElement('input');
-                  folderInput.type = 'file';
-                  folderInput.webkitdirectory = true;
-                  folderInput.multiple = true;
-                  folderInput.accept = 'image/*';
-                  folderInput.style.display = 'none';
-                  
-                  folderInput.onchange = (e) => {
-                    const target = e.target as HTMLInputElement;
-                    if (target.files) {
-                      const event = {
-                        target: {
-                          files: target.files,
-                          value: ''
-                        }
-                      } as React.ChangeEvent<HTMLInputElement>;
-                      handleImageUpload(event);
-                    }
-                    document.body.removeChild(folderInput);
-                  };
-                  
-                  document.body.appendChild(folderInput);
-                  folderInput.click();
-                }}
-                style={{
-                  background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '16px 32px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
-                }}
-              >
-                📂 Upload Folder
               </button>
               <button
                 onClick={() => pdfInputRef.current?.click()}
@@ -1997,8 +1873,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               overflow: 'hidden', 
               display: 'flex', 
               flexDirection: 'column',
-              background: '#f9f9f9',
-              position: 'relative'
+              background: '#f9f9f9'
             }}>
               {(() => {
                 const page = pages.find(p => p.id === pageId);
@@ -2010,8 +1885,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '10px',
-                    position: 'relative'
+                    padding: '10px'
                   }}>
                     <img
                       src={page.imageData}
@@ -2026,175 +1900,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                       }}
                     />
-
-                    {/* Resize Arrows - exactly like cropper */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gridTemplateRows: 'repeat(3, 1fr)',
-                      gap: '12px',
-                      pointerEvents: 'auto'
-                    }}>
-                      {/* Top Row */}
-                      <div></div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFloatingPages(prev => ({
-                            ...prev,
-                            [pageId]: {
-                              ...prev[pageId],
-                              size: {
-                                width: prev[pageId].size.width,
-                                height: Math.max(200, prev[pageId].size.height - 20)
-                              }
-                            }
-                          }));
-                        }}
-                        style={{
-                          background: "linear-gradient(135deg, #FF5722, #E64A19)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: "pointer",
-                          fontSize: "18px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
-                        }}
-                        title="Resize Up"
-                      >
-                        ↑
-                      </button>
-                      <div></div>
-
-                      {/* Middle Row */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFloatingPages(prev => ({
-                            ...prev,
-                            [pageId]: {
-                              ...prev[pageId],
-                              size: {
-                                width: Math.max(300, prev[pageId].size.width - 20),
-                                height: prev[pageId].size.height
-                              }
-                            }
-                          }));
-                        }}
-                        style={{
-                          background: "linear-gradient(135deg, #FF5722, #E64A19)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: "pointer",
-                          fontSize: "18px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
-                        }}
-                        title="Resize Left"
-                      >
-                        ←
-                      </button>
-                      <div style={{
-                        background: "rgba(0,0,0,0.5)",
-                        borderRadius: "50%",
-                        width: "40px",
-                        height: "40px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "white",
-                        fontSize: "12px",
-                        fontWeight: "bold"
-                      }}>
-                        ↔↕
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFloatingPages(prev => ({
-                            ...prev,
-                            [pageId]: {
-                              ...prev[pageId],
-                              size: {
-                                width: prev[pageId].size.width + 20,
-                                height: prev[pageId].size.height
-                              }
-                            }
-                          }));
-                        }}
-                        style={{
-                          background: "linear-gradient(135deg, #FF5722, #E64A19)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: "pointer",
-                          fontSize: "18px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
-                        }}
-                        title="Resize Right"
-                      >
-                        →
-                      </button>
-
-                      {/* Bottom Row */}
-                      <div></div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFloatingPages(prev => ({
-                            ...prev,
-                            [pageId]: {
-                              ...prev[pageId],
-                              size: {
-                                width: prev[pageId].size.width,
-                                height: prev[pageId].size.height + 20
-                              }
-                            }
-                          }));
-                        }}
-                        style={{
-                          background: "linear-gradient(135deg, #FF5722, #E64A19)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: "pointer",
-                          fontSize: "18px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
-                        }}
-                        title="Resize Down"
-                      >
-                        ↓
-                      </button>
-                      <div></div>
-                    </div>
                   </div>
                 );
               })()}
