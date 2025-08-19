@@ -282,7 +282,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
-          const img = new Image();
+          const img = new window.Image();
           img.onload = () => {
             const maxDimension = 1500;
             let { naturalWidth: width, naturalHeight: height } = img;
@@ -676,7 +676,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         canvas.width = page.crop.width;
         canvas.height = page.crop.height;
 
-        const img = new Image();
+        const img = new window.Image();
         img.src = page.imageData;
         await new Promise((resolve) => { img.onload = resolve; });
 
