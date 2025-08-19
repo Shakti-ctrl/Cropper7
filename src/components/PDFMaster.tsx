@@ -1522,27 +1522,15 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       } catch (shareError: any) {
                         if (shareError.name !== 'AbortError') {
                           console.log('Share cancelled or failed:', shareError);
-                          // Fallback to download
-                          const url = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
-                          const link = document.createElement('a');
-                          link.href = url;
-                          link.download = filename;
-                          link.click();
-                          URL.revokeObjectURL(url);
-                          completeProcessingJob(jobId, 'completed', 'PDF downloaded (sharing not supported)');
+                          // Show message instead of auto-download
+                          completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
                         } else {
                           completeProcessingJob(jobId, 'completed', 'Share cancelled');
                         }
                       }
                     } else {
-                      // Fallback to download if sharing not supported
-                      const url = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = filename;
-                      link.click();
-                      URL.revokeObjectURL(url);
-                      completeProcessingJob(jobId, 'completed', 'PDF downloaded (sharing not supported)');
+                      // Just show message - no auto download
+                      completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
                     }
                   } catch (error) {
                     console.error('Error creating PDF for sharing:', error);
