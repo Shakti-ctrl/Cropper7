@@ -1243,30 +1243,106 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     return;
                   }
 
-                  if (navigator.share) {
-                    try {
-                      await navigator.share({
-                        title: `${activeSession.name} - PDF Master`,
-                        text: `Check out my PDF presentation with ${pages.length} pages created using PDF Master!`,
-                        url: window.location.href
-                      });
-                    } catch (error) {
-                      console.log('Share cancelled or failed:', error);
-                    }
-                  } else {
-                    const shareText = `Check out my PDF presentation "${activeSession.name}" with ${pages.length} pages created using PDF Master! ${window.location.href}`;
+                  const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
 
-                    if (navigator.clipboard) {
+                  try {
+                    updateProcessingJob(jobId, { message: 'Creating PDF for sharing...' });
+
+                    // Create PDF exactly like cropper does
+                    const { jsPDF } = await import('jspdf');
+                    const pdf = new jsPDF();
+                    const sortedPages = pages.sort((a, b) => a.order - b.order);
+
+                    let isFirstPage = true;
+                    for (let i = 0; i < sortedPages.length; i++) {
+                      const page = sortedPages[i];
+                      updateProcessingJob(jobId, {
+                        progress: i,
+                        message: `Processing page ${i + 1}/${sortedPages.length} for sharing`
+                      });
+
+                      if (!isFirstPage) {
+                        pdf.addPage();
+                      }
+                      isFirstPage = false;
+
+                      // Create canvas and draw image with rotation
+                      const canvas = document.createElement('canvas');
+                      const ctx = canvas.getContext('2d')!;
+                      canvas.width = page.crop.width;
+                      canvas.height = page.crop.height;
+
+                      const img = new Image();
+                      img.src = page.imageData;
+                      await new Promise((resolve) => { img.onload = resolve; });
+
+                      ctx.save();
+                      if (page.rotation !== 0) {
+                        const centerX = canvas.width / 2;
+                        const centerY = canvas.height / 2;
+                        ctx.translate(centerX, centerY);
+                        ctx.rotate((page.rotation * Math.PI) / 180);
+                        ctx.translate(-centerX, -centerY);
+                      }
+                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                      ctx.restore();
+
+                      const pageWidth = pdf.internal.pageSize.getWidth();
+                      const pageHeight = pdf.internal.pageSize.getHeight();
+                      const imgAspectRatio = canvas.width / canvas.height;
+                      const pageAspectRatio = pageWidth / pageHeight;
+
+                      let imgWidth, imgHeight;
+                      if (imgAspectRatio > pageAspectRatio) {
+                        imgWidth = pageWidth;
+                        imgHeight = pageWidth / imgAspectRatio;
+                      } else {
+                        imgHeight = pageHeight;
+                        imgWidth = pageHeight * imgAspectRatio;
+                      }
+
+                      const x = (pageWidth - imgWidth) / 2;
+                      const y = (pageHeight - imgHeight) / 2;
+
+                      const imageData = canvas.toDataURL('image/png');
+                      const pngImage = await pdf.embedPng(imageData);
+                      const pdfPage = pdf.addPage([canvas.width, canvas.height]);
+                      pdfPage.drawImage(pngImage, {
+                        x: 0,
+                        y: 0,
+                        width: canvas.width,
+                        height: canvas.height
+                      });
+                    }
+
+                    updateProcessingJob(jobId, { message: 'Finalizing PDF for sharing...' });
+                    const pdfBytes = await pdf.save({ returnPromise: true });
+                    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+
+                    // Share exactly like cropper's quality panel
+                    if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], `${activeSession.name}.pdf`, { type: 'application/pdf' })] })) {
                       try {
-                        await navigator.clipboard.writeText(shareText);
-                        alert('Share text copied to clipboard!');
+                        await navigator.share({
+                          title: `${activeSession.name} - Enhanced PDF`,
+                          text: `Check out my enhanced PDF with ${pages.length} pages!`,
+                          files: [new File([blob], `${activeSession.name}.pdf`, { type: 'application/pdf' })]
+                        });
+                        completeProcessingJob(jobId, 'completed', `📲 PDF shared successfully! ${pages.length} pages shared.`);
                       } catch (error) {
-                        console.error('Failed to copy to clipboard:', error);
-                        prompt('Copy this text to share:', shareText);
+                        if (error.name !== 'AbortError') {
+                          console.error('Share failed:', error);
+                          completeProcessingJob(jobId, 'error', 'Share cancelled or failed');
+                        } else {
+                          completeProcessingJob(jobId, 'completed', 'Share cancelled by user');
+                        }
                       }
                     } else {
-                      prompt('Copy this text to share:', shareText);
+                      // Fallback - just show message, no auto download (exactly like cropper)
+                      completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
                     }
+                  } catch (error) {
+                    console.error('Error creating PDF for sharing:', error);
+                    completeProcessingJob(jobId, 'error', 'Error creating PDF for sharing');
                   }
                 }}
                 style={{
