@@ -68,7 +68,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
   const [pages, setPages] = useState<PDFPage[]>(activeSession.pages);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
-  
+
   // Check if current session has any processing jobs
   const currentSessionJobs = processingJobs.filter(job => job.sessionId === activeSessionId);
   const isCurrentSessionProcessing = currentSessionJobs.some(job => job.status === 'processing');
@@ -1301,9 +1301,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                         imgWidth = pageHeight * imgAspectRatio;
                       }
 
-                      const x = (pageWidth - imgWidth) / 2;
-                      const y = (pageHeight - imgHeight) / 2;
-
                       const imageData = canvas.toDataURL('image/png');
                       const pngImage = await pdf.embedPng(imageData);
                       const pdfPage = pdf.addPage([canvas.width, canvas.height]);
@@ -1389,7 +1386,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               </span>
             )}
           </div>
-          
+
           {/* Jobs List */}
           {processingJobs.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
