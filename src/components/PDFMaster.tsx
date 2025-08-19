@@ -1344,23 +1344,72 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
                     const pdfBlob = pdf.output('blob');
 
-                    if (navigator.share && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
+                    // Create downloadable blob URL for sharing
+                    const blobUrl = URL.createObjectURL(pdfBlob);
+
+                    if (navigator.share) {
                       try {
-                        await navigator.share({
-                          title: '🎨 Enhanced PDF Pages',
-                          text: 'Check out these digitally enhanced PDF pages!',
-                          files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
-                        });
-                        alert('📄 PDF shared successfully!');
+                        // Try sharing with file first
+                        if (navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
+                          await navigator.share({
+                            title: '🎨 Enhanced PDF Pages',
+                            text: 'Check out these digitally enhanced PDF pages!',
+                            files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
+                          });
+                        } else {
+                          // Fallback: share with URL and auto-download
+                          const downloadLink = document.createElement('a');
+                          downloadLink.href = blobUrl;
+                          downloadLink.download = filename;
+                          downloadLink.style.display = 'none';
+                          document.body.appendChild(downloadLink);
+                          downloadLink.click();
+                          document.body.removeChild(downloadLink);
+                          
+                          await navigator.share({
+                            title: '🎨 Enhanced PDF Pages',
+                            text: `Check out these ${sortedPages.length} digitally enhanced PDF pages!`,
+                            url: window.location.href
+                          });
+                        }
                       } catch (shareError: any) {
                         if (shareError.name !== 'AbortError') {
-                          console.log('Share failed:', shareError);
-                          alert(`📄 PDF generated successfully! You can share this PDF of ${sortedPages.length} enhanced pages.`);
+                          // Auto-download if share fails
+                          const downloadLink = document.createElement('a');
+                          downloadLink.href = blobUrl;
+                          downloadLink.download = filename;
+                          downloadLink.style.display = 'none';
+                          document.body.appendChild(downloadLink);
+                          downloadLink.click();
+                          document.body.removeChild(downloadLink);
                         }
                       }
                     } else {
-                      alert(`📄 PDF generated successfully! You can share this PDF of ${sortedPages.length} enhanced pages.`);
+                      // No share API: auto-download and show share instructions
+                      const downloadLink = document.createElement('a');
+                      downloadLink.href = blobUrl;
+                      downloadLink.download = filename;
+                      downloadLink.style.display = 'none';
+                      document.body.appendChild(downloadLink);
+                      downloadLink.click();
+                      document.body.removeChild(downloadLink);
+                      
+                      // Show share options
+                      const shareText = `Check out my ${sortedPages.length} enhanced PDF pages created with PDF Master!`;
+                      if (navigator.clipboard) {
+                        try {
+                          await navigator.clipboard.writeText(shareText);
+                          alert('📄 PDF downloaded! Share text copied to clipboard - paste it anywhere to share!');
+                        } catch {
+                          prompt('📄 PDF downloaded! Copy this text to share:', shareText);
+                        }
+                      } else {
+                        prompt('📄 PDF downloaded! Copy this text to share:', shareText);
+                      }
                     }
+
+                    // Cleanup blob URL
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                   } catch (error) {
                     console.error('Error sharing PDF:', error);
                     alert('❌ Error creating PDF. Please try again or check your pages.');
