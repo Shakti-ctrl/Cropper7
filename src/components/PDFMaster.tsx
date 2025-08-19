@@ -64,6 +64,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [processingJobs, setProcessingJobs] = useState<ProcessingJob[]>([]);
   const [globalProcessingCount, setGlobalProcessingCount] = useState(0);
 
+  // PDF Toolkit Advanced Features
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedPDFs, setSelectedPDFs] = useState<File[]>([]);
+  const [resizeMode, setResizeMode] = useState(false);
+  const [marginMode, setMarginMode] = useState(false);
+  const [resizeSettings, setResizeSettings] = useState({
+    width: 595, // A4 width in points
+    height: 842, // A4 height in points
+    unit: 'points' as 'points' | 'mm' | 'inches'
+  });
+  const [marginSettings, setMarginSettings] = useState({
+    top: 72, // 1 inch in points
+    bottom: 72,
+    left: 72,
+    right: 72
+  });
+
   // Current session data
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
   const [pages, setPages] = useState<PDFPage[]>(activeSession.pages);
@@ -86,6 +103,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const mergePDFsRef = useRef<HTMLInputElement>(null);
   const floatingRefs = useRef<{[key: string]: HTMLDivElement}>({});
 
   // Session management functions - exact same as cropper
@@ -495,6 +513,241 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       setRearrangeInput('');
     } catch (error) {
       alert('Invalid input format. Please use comma-separated numbers.');
+    }
+  };
+
+  // PDF Toolkit Advanced Functions
+
+  // Merge Multiple PDFs
+  const mergePDFs = async (files: File[]) => {
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'upload', files.length);
+    
+    try {
+      updateProcessingJob(jobId, { message: 'Creating merged document...' });
+      const mergedPdf = await PDFDocument.create();
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        updateProcessingJob(jobId, { 
+          progress: i,
+          message: `Processing ${file.name} (${i + 1}/${files.length})` 
+        });
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await PDFDocument.load(arrayBuffer);
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+      }
+      
+      const mergedPdfBytes = await mergedPdf.save();
+      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'merged_document.pdf';
+      link.click();
+      
+      URL.revokeObjectURL(url);
+      completeProcessingJob(jobId, 'completed', `Successfully merged ${files.length} PDFs!`);
+      
+    } catch (error) {
+      console.error('Error merging PDFs:', error);
+      completeProcessingJob(jobId, 'error', 'Error merging PDF files');
+    }
+  };
+
+  // Handle multiple PDF selection for merging
+  const handleMergePDFs = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length < 2) {
+      alert('Please select at least 2 PDF files to merge');
+      return;
+    }
+    
+    const pdfFiles = files.filter(file => file.type === 'application/pdf');
+    if (pdfFiles.length !== files.length) {
+      alert('All selected files must be PDFs');
+      return;
+    }
+    
+    await mergePDFs(pdfFiles);
+    if (event.target) event.target.value = '';
+  };
+
+  // Resize PDF pages
+  const resizePDFPages = async () => {
+    if (pages.length === 0) {
+      alert('No pages to resize');
+      return;
+    }
+
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
+    
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const sortedPages = pages.sort((a, b) => a.order - b.order);
+
+      for (let i = 0; i < sortedPages.length; i++) {
+        const page = sortedPages[i];
+        updateProcessingJob(jobId, {
+          progress: i,
+          message: `Resizing page ${i + 1}/${sortedPages.length}`
+        });
+
+        // Generate transformed image with all effects applied
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d')!;
+
+        canvas.width = page.crop.width;
+        canvas.height = page.crop.height;
+
+        const img = new Image();
+        img.src = page.imageData;
+        await new Promise((resolve) => { img.onload = resolve; });
+
+        ctx.save();
+        if (page.rotation !== 0) {
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          ctx.translate(centerX, centerY);
+          ctx.rotate((page.rotation * Math.PI) / 180);
+          ctx.translate(-centerX, -centerY);
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        const transformedImageData = canvas.toDataURL('image/png');
+        const imageBytes = await fetch(transformedImageData).then(res => res.arrayBuffer());
+        const pngImage = await pdfDoc.embedPng(imageBytes);
+        
+        // Apply resize settings
+        const pdfPage = pdfDoc.addPage([resizeSettings.width, resizeSettings.height]);
+        
+        // Calculate scaling to fit image in new dimensions
+        const scaleX = resizeSettings.width / page.crop.width;
+        const scaleY = resizeSettings.height / page.crop.height;
+        const scale = Math.min(scaleX, scaleY);
+        
+        const scaledWidth = page.crop.width * scale;
+        const scaledHeight = page.crop.height * scale;
+        
+        // Center the image
+        const x = (resizeSettings.width - scaledWidth) / 2;
+        const y = (resizeSettings.height - scaledHeight) / 2;
+        
+        pdfPage.drawImage(pngImage, {
+          x, y,
+          width: scaledWidth,
+          height: scaledHeight
+        });
+      }
+
+      updateProcessingJob(jobId, { message: 'Finalizing resized PDF...' });
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeSession.name}_resized.pdf`;
+      link.click();
+
+      URL.revokeObjectURL(url);
+      completeProcessingJob(jobId, 'completed', 'PDF resized successfully!');
+    } catch (error) {
+      console.error('Error resizing PDF:', error);
+      completeProcessingJob(jobId, 'error', 'Error resizing PDF');
+    }
+  };
+
+  // Add margins to PDF pages
+  const addMarginsToPages = async () => {
+    if (pages.length === 0) {
+      alert('No pages to add margins to');
+      return;
+    }
+
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
+    
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const sortedPages = pages.sort((a, b) => a.order - b.order);
+
+      for (let i = 0; i < sortedPages.length; i++) {
+        const page = sortedPages[i];
+        updateProcessingJob(jobId, {
+          progress: i,
+          message: `Adding margins to page ${i + 1}/${sortedPages.length}`
+        });
+
+        // Generate transformed image with all effects applied
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d')!;
+
+        canvas.width = page.crop.width;
+        canvas.height = page.crop.height;
+
+        const img = new Image();
+        img.src = page.imageData;
+        await new Promise((resolve) => { img.onload = resolve; });
+
+        ctx.save();
+        if (page.rotation !== 0) {
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          ctx.translate(centerX, centerY);
+          ctx.rotate((page.rotation * Math.PI) / 180);
+          ctx.translate(-centerX, -centerY);
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        const transformedImageData = canvas.toDataURL('image/png');
+        const imageBytes = await fetch(transformedImageData).then(res => res.arrayBuffer());
+        const pngImage = await pdfDoc.embedPng(imageBytes);
+        
+        // Calculate page size with margins
+        const contentWidth = page.crop.width;
+        const contentHeight = page.crop.height;
+        const pageWidth = contentWidth + marginSettings.left + marginSettings.right;
+        const pageHeight = contentHeight + marginSettings.top + marginSettings.bottom;
+        
+        const pdfPage = pdfDoc.addPage([pageWidth, pageHeight]);
+        
+        // Draw image with margins
+        pdfPage.drawImage(pngImage, {
+          x: marginSettings.left,
+          y: marginSettings.bottom,
+          width: contentWidth,
+          height: contentHeight
+        });
+      }
+
+      updateProcessingJob(jobId, { message: 'Finalizing PDF with margins...' });
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeSession.name}_with_margins.pdf`;
+      link.click();
+
+      URL.revokeObjectURL(url);
+      completeProcessingJob(jobId, 'completed', 'Margins added successfully!');
+    } catch (error) {
+      console.error('Error adding margins:', error);
+      completeProcessingJob(jobId, 'error', 'Error adding margins');
+    }
+  };
+
+  // Convert units for resize settings
+  const convertToPoints = (value: number, unit: string): number => {
+    switch (unit) {
+      case 'mm': return value * 2.834645669;
+      case 'inches': return value * 72;
+      default: return value; // points
     }
   };
 
@@ -1748,6 +2001,242 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 📄 Upload PDF
               </button>
             </div>
+
+            {/* PDF Toolkit Advanced Tools Row */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '16px', 
+              marginTop: '24px',
+              flexWrap: 'wrap',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={() => mergePDFsRef.current?.click()}
+                style={{
+                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                }}
+              >
+                🔗 Merge PDFs
+              </button>
+              
+              <button
+                onClick={() => setResizeMode(!resizeMode)}
+                style={{
+                  background: resizeMode 
+                    ? 'linear-gradient(45deg, #4CAF50, #45a049)' 
+                    : 'linear-gradient(45deg, #607D8B, #455A64)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                }}
+              >
+                📏 Resize Pages {resizeMode ? '✓' : ''}
+              </button>
+              
+              <button
+                onClick={() => setMarginMode(!marginMode)}
+                style={{
+                  background: marginMode 
+                    ? 'linear-gradient(45deg, #4CAF50, #45a049)' 
+                    : 'linear-gradient(45deg, #795548, #5D4037)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                }}
+              >
+                📐 Add Margins {marginMode ? '✓' : ''}
+              </button>
+            </div>
+
+            {/* Resize Settings Panel */}
+            {resizeMode && (
+              <div style={{
+                marginTop: '24px',
+                padding: '20px',
+                background: 'rgba(33, 150, 243, 0.1)',
+                borderRadius: '12px',
+                border: '2px solid rgba(33, 150, 243, 0.3)'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#1976D2' }}>📏 Resize Settings</h3>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Width:</label>
+                    <input
+                      type="number"
+                      value={resizeSettings.width}
+                      onChange={(e) => setResizeSettings(prev => ({...prev, width: parseInt(e.target.value) || 595}))}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        width: '100px'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Height:</label>
+                    <input
+                      type="number"
+                      value={resizeSettings.height}
+                      onChange={(e) => setResizeSettings(prev => ({...prev, height: parseInt(e.target.value) || 842}))}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        width: '100px'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Unit:</label>
+                    <select
+                      value={resizeSettings.unit}
+                      onChange={(e) => setResizeSettings(prev => ({...prev, unit: e.target.value as any}))}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd'
+                      }}
+                    >
+                      <option value="points">Points</option>
+                      <option value="mm">MM</option>
+                      <option value="inches">Inches</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={resizePDFPages}
+                    disabled={pages.length === 0}
+                    style={{
+                      background: pages.length === 0 
+                        ? '#ccc' 
+                        : 'linear-gradient(45deg, #2196F3, #1976D2)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '12px 20px',
+                      color: 'white',
+                      cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    📏 Apply Resize
+                  </button>
+                </div>
+                <div style={{ marginTop: '12px', fontSize: '14px', color: '#666' }}>
+                  📋 Common sizes: A4 (595×842), Letter (612×792), Legal (612×1008)
+                </div>
+              </div>
+            )}
+
+            {/* Margin Settings Panel */}
+            {marginMode && (
+              <div style={{
+                marginTop: '24px',
+                padding: '20px',
+                background: 'rgba(121, 85, 72, 0.1)',
+                borderRadius: '12px',
+                border: '2px solid rgba(121, 85, 72, 0.3)'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#5D4037' }}>📐 Margin Settings (in points)</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Top:</label>
+                    <input
+                      type="number"
+                      value={marginSettings.top}
+                      onChange={(e) => setMarginSettings(prev => ({...prev, top: parseInt(e.target.value) || 0}))}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        width: '100%'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Bottom:</label>
+                    <input
+                      type="number"
+                      value={marginSettings.bottom}
+                      onChange={(e) => setMarginSettings(prev => ({...prev, bottom: parseInt(e.target.value) || 0}))}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        width: '100%'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Left:</label>
+                    <input
+                      type="number"
+                      value={marginSettings.left}
+                      onChange={(e) => setMarginSettings(prev => ({...prev, left: parseInt(e.target.value) || 0}))}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        width: '100%'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Right:</label>
+                    <input
+                      type="number"
+                      value={marginSettings.right}
+                      onChange={(e) => setMarginSettings(prev => ({...prev, right: parseInt(e.target.value) || 0}))}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '2px solid #ddd',
+                        width: '100%'
+                      }}
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={addMarginsToPages}
+                  disabled={pages.length === 0}
+                  style={{
+                    background: pages.length === 0 
+                      ? '#ccc' 
+                      : 'linear-gradient(45deg, #795548, #5D4037)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '12px 20px',
+                    color: 'white',
+                    cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold',
+                    marginTop: '16px',
+                    width: '100%'
+                  }}
+                >
+                  📐 Apply Margins
+                </button>
+                <div style={{ marginTop: '12px', fontSize: '14px', color: '#666' }}>
+                  📋 Standard: 72pt = 1 inch, 36pt = 0.5 inch, 144pt = 2 inches
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div style={{
@@ -2146,6 +2635,14 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         accept=".pdf"
         style={{ display: 'none' }}
         onChange={handlePDFUpload}
+      />
+      <input
+        ref={mergePDFsRef}
+        type="file"
+        multiple
+        accept=".pdf"
+        style={{ display: 'none' }}
+        onChange={handleMergePDFs}
       />
 
       {/* Floating Pages Windows - EXACT same functionality as cropper */}
