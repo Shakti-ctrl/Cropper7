@@ -24,7 +24,7 @@ interface PDFPage {
 
 interface PDFSession {
   name: string;
-  pages: PDFPage[];
+  pageCount: number;
   createdAt: Date;
   modifiedAt: Date;
 }
@@ -45,71 +45,106 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
-  // Save session to localStorage
+  // Save session to localStorage with error handling
   const saveSession = useCallback(() => {
-    const session: PDFSession = {
-      name: sessionName,
-      pages,
-      createdAt: new Date(),
-      modifiedAt: new Date()
-    };
-    localStorage.setItem('pdfMasterSession', JSON.stringify(session));
-  }, [sessionName, pages]);
+    try {
+      // Only save essential data, not the large imageData
+      const lightSession = {
+        name: sessionName,
+        pageCount: pages.length,
+        createdAt: new Date(),
+        modifiedAt: new Date()
+      };
+      localStorage.setItem('pdfMasterSession', JSON.stringify(lightSession));
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        console.warn('Storage quota exceeded, skipping session save');
+        // Clear old data to make space
+        localStorage.removeItem('pdfMasterSession');
+      } else {
+        console.error('Failed to save session:', error);
+      }
+    }
+  }, [sessionName, pages.length]);
 
   // Load session from localStorage
   const loadSession = useCallback(() => {
     const saved = localStorage.getItem('pdfMasterSession');
     if (saved) {
       try {
-        const session: PDFSession = JSON.parse(saved);
-        setSessionName(session.name);
-        setPages(session.pages);
+        const session = JSON.parse(saved);
+        setSessionName(session.name || 'PDF Project');
+        // Don't try to restore pages as they contain large image data
       } catch (error) {
         console.error('Failed to load session:', error);
+        localStorage.removeItem('pdfMasterSession');
       }
     }
   }, []);
 
   useEffect(() => {
     if (isVisible) {
+      // Clear any problematic storage on start
+      try {
+        localStorage.removeItem('pdfMasterSession');
+      } catch (error) {
+        console.warn('Could not clear storage:', error);
+      }
       loadSession();
     }
   }, [isVisible, loadSession]);
 
   useEffect(() => {
-    if (pages.length > 0) {
+    // Only save session metadata, not the full page data
+    if (sessionName !== 'PDF Project') {
       saveSession();
     }
-  }, [pages, sessionName, saveSession]);
+  }, [sessionName, saveSession]);
 
-  // Convert image file to PDFPage (using same pattern as cropper)
+  // Convert image file to PDFPage with better error handling
   const imageToPage = async (file: File, order: number): Promise<PDFPage | null> => {
     try {
+      // Check file size to prevent memory issues
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        console.warn(`File ${file.name} is too large (${Math.round(file.size / 1024 / 1024)}MB), skipping`);
+        return null;
+      }
+
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
             const img = new Image();
             img.onload = () => {
+              // Limit image dimensions to prevent memory issues
+              const maxDimension = 2000;
+              let { naturalWidth: width, naturalHeight: height } = img;
+              
+              if (width > maxDimension || height > maxDimension) {
+                const scale = maxDimension / Math.max(width, height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+              }
+
               resolve({
                 id: `page_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 name: file.name,
                 imageData: e.target?.result as string,
                 originalImage: img,
                 rotation: 0,
-                crop: { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight },
+                crop: { x: 0, y: 0, width, height },
                 order,
-                width: img.naturalWidth,
-                height: img.naturalHeight
+                width,
+                height
               });
             };
-            img.onerror = () => reject(new Error('Failed to load image'));
+            img.onerror = () => reject(new Error(`Failed to load image: ${file.name}`));
             img.src = e.target?.result as string;
           } catch (error) {
             reject(error);
           }
         };
-        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
         reader.readAsDataURL(file);
       });
     } catch (error) {
