@@ -1245,12 +1245,11 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       return;
                     }
 
-                    // Create PDF exactly like Quality Panel
                     const { jsPDF } = await import('jspdf');
+                    const sortedPages = pages.sort((a, b) => a.order - b.order);
+
                     const pdf = new jsPDF();
                     let isFirstPage = true;
-
-                    const sortedPages = pages.sort((a, b) => a.order - b.order);
 
                     for (let i = 0; i < sortedPages.length; i++) {
                       const page = sortedPages[i];
@@ -1263,7 +1262,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       const pageWidth = pdf.internal.pageSize.getWidth();
                       const pageHeight = pdf.internal.pageSize.getHeight();
 
-                      // Calculate image dimensions to fit page
                       const imgAspectRatio = page.width / page.height;
                       const pageAspectRatio = pageWidth / pageHeight;
 
@@ -1289,9 +1287,9 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
                     const sessionName = activeSession.name.replace(/[^a-zA-Z0-9-_]/g, '_');
                     const filename = `${sessionName}_enhanced_${new Date().toISOString().slice(0, 10)}.pdf`;
+
                     const pdfBlob = pdf.output('blob');
 
-                    // Use exact same sharing logic as Quality Panel
                     if (navigator.share && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
                       try {
                         await navigator.share({
@@ -1307,7 +1305,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                         }
                       }
                     } else {
-                      // Just show message - no auto download, exactly like Quality Panel
                       alert(`📄 PDF generated successfully! You can share this PDF of ${sortedPages.length} enhanced pages.`);
                     }
                   } catch (error) {
