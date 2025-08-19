@@ -1186,7 +1186,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       <div style={{ marginBottom: '16px' }}>
                         <RadioGroup 
                           value={isMultiple ? "all" : "current"}
-                          onValueChange={(value) => setIsMultiple(value === "all")}
+                          onValueChange={(value: string) => setIsMultiple(value === "all")}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <RadioGroupItem value="current" id="r1" />
@@ -1255,7 +1255,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
                         <RadioGroup 
                           value={isMultiple ? "all" : "current"}
-                          onValueChange={(value) => setIsMultiple(value === "all")}
+                          onValueChange={(value: string) => setIsMultiple(value === "all")}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <RadioGroupItem value="current" id="m1" />
