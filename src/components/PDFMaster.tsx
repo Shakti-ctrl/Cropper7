@@ -498,6 +498,56 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
+  // Generate transformed image with all effects applied
+  const generateTransformedImage = (page: PDFPage): Promise<string> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+      
+      img.onload = () => {
+        // Apply crop first
+        const cropWidth = page.crop.width;
+        const cropHeight = page.crop.height;
+        const cropX = page.crop.x;
+        const cropY = page.crop.y;
+        
+        // Set canvas size to cropped dimensions
+        canvas.width = cropWidth;
+        canvas.height = cropHeight;
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Apply rotation
+        if (page.rotation !== 0) {
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((page.rotation * Math.PI) / 180);
+          
+          // Draw cropped and rotated image
+          ctx.drawImage(
+            img,
+            cropX, cropY, cropWidth, cropHeight,
+            -cropWidth / 2, -cropHeight / 2, cropWidth, cropHeight
+          );
+          ctx.restore();
+        } else {
+          // Draw cropped image without rotation
+          ctx.drawImage(
+            img,
+            cropX, cropY, cropWidth, cropHeight,
+            0, 0, cropWidth, cropHeight
+          );
+        }
+        
+        resolve(canvas.toDataURL('image/png'));
+      };
+      
+      img.src = page.imageData;
+    });
+  };
+
   // Export to PDF
   const exportToPDF = async () => {
     if (pages.length === 0) {
@@ -1259,10 +1309,14 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       }
                       isFirstPage = false;
 
+                      // Generate transformed image with rotation, cropping, and reordering
+                      const transformedImageData = await generateTransformedImage(page);
+
                       const pageWidth = pdf.internal.pageSize.getWidth();
                       const pageHeight = pdf.internal.pageSize.getHeight();
 
-                      const imgAspectRatio = page.width / page.height;
+                      // Use crop dimensions for aspect ratio calculation
+                      const imgAspectRatio = page.crop.width / page.crop.height;
                       const pageAspectRatio = pageWidth / pageHeight;
 
                       let imgWidth, imgHeight;
@@ -1278,7 +1332,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       const y = (pageHeight - imgHeight) / 2;
 
                       try {
-                        pdf.addImage(page.imageData, 'PNG', x, y, imgWidth, imgHeight, undefined, 'FAST');
+                        pdf.addImage(transformedImageData, 'PNG', x, y, imgWidth, imgHeight, undefined, 'FAST');
                       } catch (imageError) {
                         console.warn(`Failed to add page ${i} to PDF:`, imageError);
                         continue;
