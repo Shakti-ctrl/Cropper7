@@ -7,6 +7,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/$
 
 interface PDFPage {
   id: string;
+  name: string;
   imageData: string;
   originalImage?: HTMLImageElement;
   rotation: number;
@@ -17,6 +18,8 @@ interface PDFPage {
     height: number;
   };
   order: number;
+  width: number;
+  height: number;
 }
 
 interface PDFSession {
@@ -35,16 +38,12 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [sessionName, setSessionName] = useState('PDF Project');
   const [pages, setPages] = useState<PDFPage[]>([]);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
-  const [currentView, setCurrentView] = useState<'grid' | 'single'>('grid');
-  const [showFloatingPreview, setShowFloatingPreview] = useState(false);
-  const [previewPage, setPreviewPage] = useState<PDFPage | null>(null);
-  const [floatingPosition, setFloatingPosition] = useState({ x: 100, y: 100 });
-  const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
-  const floatingRef = useRef<HTMLDivElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   // Save session to localStorage
   const saveSession = useCallback(() => {
@@ -83,93 +82,148 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   }, [pages, sessionName, saveSession]);
 
-  // Convert image file to PDFPage
-  const imageToPage = async (file: File, order: number): Promise<PDFPage> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          resolve({
-            id: `${Date.now()}_${Math.random()}`,
-            imageData: e.target?.result as string,
-            originalImage: img,
-            rotation: 0,
-            crop: { x: 0, y: 0, width: img.width, height: img.height },
-            order
-          });
+  // Convert image file to PDFPage (using same pattern as cropper)
+  const imageToPage = async (file: File, order: number): Promise<PDFPage | null> => {
+    try {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const img = new Image();
+            img.onload = () => {
+              resolve({
+                id: `page_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: file.name,
+                imageData: e.target?.result as string,
+                originalImage: img,
+                rotation: 0,
+                crop: { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight },
+                order,
+                width: img.naturalWidth,
+                height: img.naturalHeight
+              });
+            };
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = e.target?.result as string;
+          } catch (error) {
+            reject(error);
+          }
         };
-        img.src = e.target?.result as string;
-      };
-      reader.readAsDataURL(file);
-    });
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+    } catch (error) {
+      console.error('Error processing image:', error);
+      return null;
+    }
   };
 
-  // Handle image files upload
+  // Handle image files upload (using same error handling as cropper)
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
     setIsProcessing(true);
-    const newPages: PDFPage[] = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (file.type.startsWith('image/')) {
-        const page = await imageToPage(file, pages.length + newPages.length);
-        newPages.push(page);
-      }
-    }
-
-    setPages(prev => [...prev, ...newPages]);
-    setIsProcessing(false);
-  };
-
-  // Handle PDF upload and extraction
-  const handlePDFUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || file.type !== 'application/pdf') return;
-
-    setIsProcessing(true);
+    setProcessingStatus(`Processing ${files.length} files...`);
+    
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
       const newPages: PDFPage[] = [];
+      let processed = 0;
 
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d')!;
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        await page.render({
-          canvasContext: context,
-          viewport: viewport,
-          canvas: canvas
-        }).promise;
-
-        const imageData = canvas.toDataURL('image/png');
-        const img = new Image();
-        img.src = imageData;
-
-        newPages.push({
-          id: `pdf_${Date.now()}_${pageNum}`,
-          imageData,
-          originalImage: img,
-          rotation: 0,
-          crop: { x: 0, y: 0, width: canvas.width, height: canvas.height },
-          order: pages.length + newPages.length
-        });
+      for (const file of files) {
+        if (file.type.startsWith('image/')) {
+          setProcessingStatus(`Processing ${file.name} (${processed + 1}/${files.length})`);
+          const page = await imageToPage(file, pages.length + newPages.length);
+          if (page) {
+            newPages.push(page);
+          }
+          processed++;
+        }
       }
 
       setPages(prev => [...prev, ...newPages]);
+      setProcessingStatus(`Successfully processed ${newPages.length} images`);
+      
+      // Clear status after 2 seconds
+      setTimeout(() => setProcessingStatus(''), 2000);
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      setProcessingStatus('Error processing files');
+      setTimeout(() => setProcessingStatus(''), 3000);
+    } finally {
+      setIsProcessing(false);
+      // Reset input
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  // Handle PDF upload and extract pages
+  const handlePDFUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    setIsProcessing(true);
+    setProcessingStatus('Extracting pages from PDF...');
+    
+    try {
+      for (const file of files) {
+        if (file.type === 'application/pdf') {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+          
+          const newPages: PDFPage[] = [];
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            setProcessingStatus(`Extracting page ${i}/${pdf.numPages} from ${file.name}`);
+            
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d')!;
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            await page.render({ 
+              canvasContext: context, 
+              viewport,
+              canvas
+            }).promise;
+            
+            const imageData = canvas.toDataURL('image/png');
+            
+            const pdfPage: PDFPage = {
+              id: `pdf_page_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
+              name: `${file.name.replace('.pdf', '')}_page_${i}`,
+              imageData,
+              rotation: 0,
+              crop: { x: 0, y: 0, width: viewport.width, height: viewport.height },
+              order: pages.length + newPages.length,
+              width: viewport.width,
+              height: viewport.height
+            };
+            
+            newPages.push(pdfPage);
+          }
+          
+          setPages(prev => [...prev, ...newPages]);
+          setProcessingStatus(`Successfully extracted ${newPages.length} pages from PDF`);
+        }
+      }
+      
+      setTimeout(() => setProcessingStatus(''), 2000);
     } catch (error) {
       console.error('Error processing PDF:', error);
-      alert('Failed to process PDF file. Please try again.');
+      setProcessingStatus('Error processing PDF file');
+      setTimeout(() => setProcessingStatus(''), 3000);
+    } finally {
+      setIsProcessing(false);
+      if (event.target) {
+        event.target.value = '';
+      }
     }
-    setIsProcessing(false);
   };
 
   // Page manipulation functions
@@ -201,15 +255,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     });
   };
 
-  const reorderPages = (fromIndex: number, toIndex: number) => {
-    setPages(prev => {
-      const newPages = [...prev];
-      const [movedPage] = newPages.splice(fromIndex, 1);
-      newPages.splice(toIndex, 0, movedPage);
-      return newPages.map((page, index) => ({ ...page, order: index }));
-    });
-  };
-
   // Export to PDF
   const exportToPDF = async () => {
     if (pages.length === 0) {
@@ -218,6 +263,8 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
 
     setIsProcessing(true);
+    setProcessingStatus('Creating PDF...');
+    
     try {
       const pdfDoc = await PDFDocument.create();
 
@@ -225,40 +272,40 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
         
-        if (page.originalImage) {
-          canvas.width = page.crop.width;
-          canvas.height = page.crop.height;
+        canvas.width = page.crop.width;
+        canvas.height = page.crop.height;
 
-          ctx.save();
-          
-          // Apply rotation
-          if (page.rotation !== 0) {
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-            ctx.translate(centerX, centerY);
-            ctx.rotate((page.rotation * Math.PI) / 180);
-            ctx.translate(-centerX, -centerY);
-          }
-
-          // Draw cropped image
-          ctx.drawImage(
-            page.originalImage,
-            page.crop.x, page.crop.y, page.crop.width, page.crop.height,
-            0, 0, canvas.width, canvas.height
-          );
-          
-          ctx.restore();
-
-          const imageBytes = canvas.toDataURL('image/png');
-          const pngImage = await pdfDoc.embedPng(imageBytes);
-          const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
-          pdfPage.drawImage(pngImage, {
-            x: 0,
-            y: 0,
-            width: canvas.width,
-            height: canvas.height
-          });
+        ctx.save();
+        
+        // Apply rotation
+        if (page.rotation !== 0) {
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          ctx.translate(centerX, centerY);
+          ctx.rotate((page.rotation * Math.PI) / 180);
+          ctx.translate(-centerX, -centerY);
         }
+
+        // Create image from imageData
+        const img = new Image();
+        img.src = page.imageData;
+        await new Promise((resolve) => {
+          img.onload = resolve;
+        });
+
+        // Draw image
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        const imageBytes = canvas.toDataURL('image/png');
+        const pngImage = await pdfDoc.embedPng(imageBytes);
+        const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
+        pdfPage.drawImage(pngImage, {
+          x: 0,
+          y: 0,
+          width: canvas.width,
+          height: canvas.height
+        });
       }
 
       const pdfBytes = await pdfDoc.save();
@@ -271,22 +318,15 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       link.click();
       
       URL.revokeObjectURL(url);
+      setProcessingStatus('PDF exported successfully!');
+      setTimeout(() => setProcessingStatus(''), 2000);
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      alert('Failed to export PDF. Please try again.');
+      setProcessingStatus('Error exporting PDF');
+      setTimeout(() => setProcessingStatus(''), 3000);
+    } finally {
+      setIsProcessing(false);
     }
-    setIsProcessing(false);
-  };
-
-  // Preview functions
-  const openPreview = (page: PDFPage) => {
-    setPreviewPage(page);
-    setShowFloatingPreview(true);
-  };
-
-  const closePreview = () => {
-    setShowFloatingPreview(false);
-    setPreviewPage(null);
   };
 
   // Selection functions
@@ -321,7 +361,9 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       height: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       zIndex: 1000,
-      overflow: 'hidden'
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column'
     }}>
       {/* Header */}
       <div style={{
@@ -418,101 +460,97 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         gap: '12px'
       }}>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button
-            onClick={reversePagesOrder}
-            disabled={pages.length === 0}
-            style={{
-              background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              color: 'white',
-              cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
-              fontSize: '12px',
-              opacity: pages.length === 0 ? 0.5 : 1
-            }}
-          >
-            🔄 Reverse Order
-          </button>
-          
-          <button
-            onClick={selectAllPages}
-            disabled={pages.length === 0}
-            style={{
-              background: 'linear-gradient(45deg, #2196F3, #1976D2)',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              color: 'white',
-              cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
-              fontSize: '12px',
-              opacity: pages.length === 0 ? 0.5 : 1
-            }}
-          >
-            ✅ Select All
-          </button>
-          
-          <button
-            onClick={clearSelection}
-            disabled={selectedPages.size === 0}
-            style={{
-              background: 'linear-gradient(45deg, #607D8B, #455A64)',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              color: 'white',
-              cursor: selectedPages.size === 0 ? 'not-allowed' : 'pointer',
-              fontSize: '12px',
-              opacity: selectedPages.size === 0 ? 0.5 : 1
-            }}
-          >
-            ❌ Clear Selection
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ color: 'white', fontSize: '14px' }}>
-            {pages.length} pages • {selectedPages.size} selected
-          </span>
-          
-          <button
-            onClick={() => setCurrentView(currentView === 'grid' ? 'single' : 'grid')}
-            style={{
-              background: 'linear-gradient(45deg, #795548, #5D4037)',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            {currentView === 'grid' ? '📄 Single View' : '⊞ Grid View'}
-          </button>
-          
-          <button
-            onClick={exportToPDF}
-            disabled={pages.length === 0 || isProcessing}
-            style={{
-              background: 'linear-gradient(45deg, #E91E63, #C2185B)',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 12px',
-              color: 'white',
-              cursor: pages.length === 0 || isProcessing ? 'not-allowed' : 'pointer',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              opacity: pages.length === 0 || isProcessing ? 0.5 : 1
-            }}
-          >
-            {isProcessing ? '⏳ Processing...' : '💾 Export PDF'}
-          </button>
+          {pages.length > 0 && (
+            <>
+              <span style={{ color: 'white', fontSize: '14px' }}>
+                📊 {pages.length} pages
+              </span>
+              {selectedPages.size > 0 && (
+                <span style={{ color: '#4CAF50', fontSize: '14px' }}>
+                  ✓ {selectedPages.size} selected
+                </span>
+              )}
+              <button
+                onClick={selectAllPages}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                Select All
+              </button>
+              <button
+                onClick={clearSelection}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                Clear
+              </button>
+              <button
+                onClick={reversePagesOrder}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                🔄 Reverse Order
+              </button>
+              <button
+                onClick={exportToPDF}
+                disabled={isProcessing}
+                style={{
+                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  color: 'white',
+                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '12px',
+                  opacity: isProcessing ? 0.7 : 1
+                }}
+              >
+                💾 Export PDF
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {/* Status Bar */}
+      {(isProcessing || processingStatus) && (
+        <div style={{
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '12px 24px',
+          textAlign: 'center',
+          fontSize: '14px'
+        }}>
+          {isProcessing && '⏳ '}
+          {processingStatus || 'Processing...'}
+        </div>
+      )}
+
       {/* Main Content */}
       <div style={{
-        height: 'calc(100vh - 120px)',
+        flex: 1,
         overflow: 'auto',
         padding: '24px'
       }}>
@@ -526,158 +564,176 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             color: 'white',
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px' }}>📄</div>
-            <h2 style={{ margin: '0 0 8px 0' }}>No Pages Yet</h2>
-            <p style={{ margin: 0, opacity: 0.8 }}>
-              Upload images or PDF files to get started
+            <div style={{ fontSize: '64px', marginBottom: '24px' }}>📄</div>
+            <h2 style={{ margin: '0 0 16px 0', fontSize: '28px' }}>Welcome to PDF Master</h2>
+            <p style={{ margin: '0 0 32px 0', fontSize: '16px', opacity: 0.8, maxWidth: '500px' }}>
+              Upload images to create a PDF document or upload an existing PDF to edit its pages. 
+              You can rotate, crop, reorder, and manipulate pages with full control.
             </p>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '16px 32px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                }}
+              >
+                📁 Upload Images
+              </button>
+              <button
+                onClick={() => pdfInputRef.current?.click()}
+                style={{
+                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '16px 32px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                }}
+              >
+                📄 Upload PDF
+              </button>
+            </div>
           </div>
         ) : (
           <div style={{
-            display: currentView === 'grid' ? 'grid' : 'flex',
+            display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '16px',
-            flexDirection: currentView === 'single' ? 'column' : undefined
+            gap: '16px'
           }}>
             {pages.map((page, index) => (
               <div
                 key={page.id}
                 style={{
-                  background: 'rgba(255,255,255,0.1)',
+                  background: 'white',
                   borderRadius: '12px',
                   padding: '12px',
-                  border: selectedPages.has(page.id) ? '2px solid #4CAF50' : '2px solid transparent',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                  border: selectedPages.has(page.id) ? '3px solid #4CAF50' : 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  position: 'relative'
                 }}
                 onClick={() => togglePageSelection(page.id)}
               >
                 <div style={{
                   position: 'relative',
                   width: '100%',
-                  aspectRatio: '3/4',
+                  paddingBottom: '141.4%', // A4 aspect ratio
+                  background: '#f5f5f5',
                   borderRadius: '8px',
-                  overflow: 'hidden',
-                  marginBottom: '8px'
+                  overflow: 'hidden'
                 }}>
                   <img
                     src={page.imageData}
-                    alt={`Page ${index + 1}`}
+                    alt={page.name || `Page ${index + 1}`}
                     style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
                       width: '100%',
                       height: '100%',
-                      objectFit: 'cover',
+                      objectFit: 'contain',
                       transform: `rotate(${page.rotation}deg)`
                     }}
                   />
-                  {selectedPages.has(page.id) && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      background: '#4CAF50',
-                      borderRadius: '50%',
-                      width: '24px',
-                      height: '24px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'white',
-                      fontSize: '12px',
-                      fontWeight: 'bold'
-                    }}>
-                      ✓
-                    </div>
-                  )}
-                </div>
-                
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
-                    Page {index + 1}
-                  </span>
                   
-                  <div style={{ display: 'flex', gap: '4px' }}>
+                  {/* Page controls */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    display: 'flex',
+                    gap: '4px'
+                  }}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         rotatePage(page.id, 'left');
                       }}
                       style={{
-                        background: 'rgba(255,255,255,0.2)',
+                        background: 'rgba(0,0,0,0.7)',
                         border: 'none',
                         borderRadius: '4px',
-                        padding: '4px',
                         color: 'white',
                         cursor: 'pointer',
-                        fontSize: '10px'
+                        padding: '4px',
+                        fontSize: '12px'
                       }}
                       title="Rotate Left"
                     >
-                      ↶
+                      ↺
                     </button>
-                    
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         rotatePage(page.id, 'right');
                       }}
                       style={{
-                        background: 'rgba(255,255,255,0.2)',
+                        background: 'rgba(0,0,0,0.7)',
                         border: 'none',
                         borderRadius: '4px',
-                        padding: '4px',
                         color: 'white',
                         cursor: 'pointer',
-                        fontSize: '10px'
+                        padding: '4px',
+                        fontSize: '12px'
                       }}
                       title="Rotate Right"
                     >
-                      ↷
+                      ↻
                     </button>
-                    
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openPreview(page);
-                      }}
-                      style={{
-                        background: 'rgba(255,255,255,0.2)',
-                        border: 'none',
-                        borderRadius: '4px',
-                        padding: '4px',
-                        color: 'white',
-                        cursor: 'pointer',
-                        fontSize: '10px'
-                      }}
-                      title="Preview"
-                    >
-                      👁
-                    </button>
-                    
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         deletePage(page.id);
                       }}
                       style={{
-                        background: 'rgba(255,0,0,0.3)',
+                        background: 'rgba(255,0,0,0.7)',
                         border: 'none',
                         borderRadius: '4px',
-                        padding: '4px',
                         color: 'white',
                         cursor: 'pointer',
-                        fontSize: '10px'
+                        padding: '4px',
+                        fontSize: '12px'
                       }}
                       title="Delete"
                     >
-                      🗑
+                      🗑️
                     </button>
                   </div>
+                  
+                  {/* Page number */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    left: '8px',
+                    background: 'rgba(0,0,0,0.7)',
+                    color: 'white',
+                    borderRadius: '4px',
+                    padding: '4px 8px',
+                    fontSize: '12px'
+                  }}>
+                    {index + 1}
+                  </div>
+                </div>
+                
+                <div style={{
+                  marginTop: '8px',
+                  fontSize: '12px',
+                  color: '#666',
+                  textAlign: 'center',
+                  wordBreak: 'break-word'
+                }}>
+                  {page.name || `Page ${index + 1}`}
                 </div>
               </div>
             ))}
@@ -685,98 +741,30 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         )}
       </div>
 
-      {/* Floating Preview */}
-      {showFloatingPreview && previewPage && (
-        <div
-          ref={floatingRef}
-          style={{
-            position: 'fixed',
-            left: `${floatingPosition.x}px`,
-            top: `${floatingPosition.y}px`,
-            width: '400px',
-            height: '500px',
-            background: 'rgba(0,0,0,0.9)',
-            borderRadius: '12px',
-            border: '2px solid rgba(255,255,255,0.3)',
-            zIndex: 10001,
-            overflow: 'hidden',
-            cursor: isDragging ? 'grabbing' : 'grab'
-          }}
-          onMouseDown={(e) => {
-            setIsDragging(true);
-            const rect = floatingRef.current?.getBoundingClientRect();
-            if (rect) {
-              setFloatingPosition({
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-              });
-            }
-          }}
-        >
-          <div style={{
-            background: 'rgba(255,255,255,0.1)',
-            padding: '12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            borderBottom: '1px solid rgba(255,255,255,0.2)'
-          }}>
-            <span style={{ color: 'white', fontWeight: 'bold' }}>
-              Page Preview
-            </span>
-            <button
-              onClick={closePreview}
-              style={{
-                background: 'rgba(255,0,0,0.3)',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '4px 8px',
-                color: 'white',
-                cursor: 'pointer'
-              }}
-            >
-              ✕
-            </button>
-          </div>
-          
-          <div style={{
-            padding: '16px',
-            height: 'calc(100% - 60px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <img
-              src={previewPage.imageData}
-              alt="Preview"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain',
-                transform: `rotate(${previewPage.rotation}deg)`,
-                borderRadius: '8px'
-              }}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Hidden file inputs */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
         multiple
+        accept="image/*"
         style={{ display: 'none' }}
         onChange={handleImageUpload}
       />
-      
       <input
         ref={pdfInputRef}
         type="file"
-        accept="application/pdf"
+        accept=".pdf"
         style={{ display: 'none' }}
         onChange={handlePDFUpload}
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        accept="image/*"
+        {...({webkitdirectory: '', directory: ''} as any)}
+        style={{ display: 'none' }}
+        onChange={handleImageUpload}
       />
     </div>
   );
