@@ -498,56 +498,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  // Generate transformed image with all effects applied
-  const generateTransformedImage = (page: PDFPage): Promise<string> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d')!;
-      const img = new Image();
-      
-      img.onload = () => {
-        // Apply crop first
-        const cropWidth = page.crop.width;
-        const cropHeight = page.crop.height;
-        const cropX = page.crop.x;
-        const cropY = page.crop.y;
-        
-        // Set canvas size to cropped dimensions
-        canvas.width = cropWidth;
-        canvas.height = cropHeight;
-        
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Apply rotation
-        if (page.rotation !== 0) {
-          ctx.save();
-          ctx.translate(canvas.width / 2, canvas.height / 2);
-          ctx.rotate((page.rotation * Math.PI) / 180);
-          
-          // Draw cropped and rotated image
-          ctx.drawImage(
-            img,
-            cropX, cropY, cropWidth, cropHeight,
-            -cropWidth / 2, -cropHeight / 2, cropWidth, cropHeight
-          );
-          ctx.restore();
-        } else {
-          // Draw cropped image without rotation
-          ctx.drawImage(
-            img,
-            cropX, cropY, cropWidth, cropHeight,
-            0, 0, cropWidth, cropHeight
-          );
-        }
-        
-        resolve(canvas.toDataURL('image/png'));
-      };
-      
-      img.src = page.imageData;
-    });
-  };
-
   // Export to PDF
   const exportToPDF = async () => {
     if (pages.length === 0) {
@@ -778,6 +728,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             }}
           >
             📄 Upload PDF
+          </button>
+
+          <button
+            onClick={() => folderInputRef.current?.click()}
+            disabled={isCurrentSessionProcessing}
+            style={{
+              background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '10px 16px',
+              color: 'white',
+              cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
+              fontWeight: 'bold',
+              opacity: isCurrentSessionProcessing ? 0.7 : 1
+            }}
+          >
+            📁 Upload Folder
           </button>
 
           <button
@@ -1190,72 +1157,270 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   try {
                     updateProcessingJob(jobId, { message: 'Creating presentation...' });
 
-                    // Create HTML presentation
-                    const presentationHTML = `
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                      <title>${activeSession.name} - Presentation</title>
-                      <style>
-                        body { margin: 0; padding: 0; background: #000; font-family: Arial, sans-serif; }
-                        .slide { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; }
-                        .slide img { max-width: 90vw; max-height: 90vh; object-fit: contain; }
-                        .controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px; }
-                        .btn { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
-                        .slide-number { position: fixed; top: 20px; right: 20px; color: white; font-size: 18px; z-index: 1000; }
-                        .hidden { display: none; }
-                      </style>
-                    </head>
-                    <body>
-                      <div class="slide-number" id="slideNumber">1 / ${pages.length}</div>
-                      ${pages.map((page, index) => `
-                        <div class="slide ${index > 0 ? 'hidden' : ''}" id="slide-${index}">
-                          <img src="${page.imageData}" alt="${page.name}" style="transform: rotate(${page.rotation}deg);" />
-                        </div>
-                      `).join('')}
-                      <div class="controls">
-                        <button class="btn" onclick="prevSlide()">← Previous</button>
-                        <button class="btn" onclick="nextSlide()">Next →</button>
-                        <button class="btn" onclick="toggleFullscreen()">Fullscreen</button>
-                      </div>
-                      <script>
-                        let currentSlide = 0;
-                        const totalSlides = ${pages.length};
+                    const sortedPages = pages.sort((a, b) => a.order - b.order);
+                    
+                    // Create HTML presentation with proper image handling
+                    const presentationHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${activeSession.name} - Presentation</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #1e3c72, #2a5298); 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            overflow: hidden;
+        }
+        .presentation-container { 
+            width: 100vw; 
+            height: 100vh; 
+            position: relative; 
+        }
+        .slide { 
+            width: 100%; 
+            height: 100%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .slide.active { opacity: 1; }
+        .slide img { 
+            max-width: 95vw; 
+            max-height: 95vh; 
+            object-fit: contain; 
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .controls { 
+            position: fixed; 
+            bottom: 30px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            z-index: 1000; 
+            display: flex; 
+            gap: 15px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px 25px;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+        }
+        .btn { 
+            background: linear-gradient(45deg, #667eea, #764ba2); 
+            color: white; 
+            border: none; 
+            padding: 12px 20px; 
+            border-radius: 25px; 
+            cursor: pointer; 
+            font-weight: bold;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        .btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .slide-info { 
+            position: fixed; 
+            top: 30px; 
+            right: 30px; 
+            color: white; 
+            font-size: 18px; 
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+        .slide-title {
+            position: fixed;
+            top: 30px;
+            left: 30px;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            padding: 15px 25px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+        .progress-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.5s ease;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation-container">
+        <div class="slide-title" id="slideTitle">${activeSession.name}</div>
+        <div class="slide-info" id="slideInfo">1 / ${sortedPages.length}</div>
+        <div class="progress-bar" id="progressBar" style="width: ${100/sortedPages.length}%"></div>
+        
+        ${sortedPages.map((page, index) => `
+        <div class="slide ${index === 0 ? 'active' : ''}" id="slide-${index}">
+            <img src="${page.imageData}" alt="${page.name}" style="transform: rotate(${page.rotation}deg);" />
+        </div>
+        `).join('')}
+        
+        <div class="controls">
+            <button class="btn" onclick="prevSlide()" id="prevBtn">⮜ Previous</button>
+            <button class="btn" onclick="togglePlay()" id="playBtn">▶ Auto Play</button>
+            <button class="btn" onclick="nextSlide()" id="nextBtn">Next ⮞</button>
+            <button class="btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+        </div>
+    </div>
 
-                        function showSlide(n) {
-                          document.querySelectorAll('.slide').forEach(slide => slide.classList.add('hidden'));
-                          document.getElementById('slide-' + n).classList.remove('hidden');
-                          document.getElementById('slideNumber').textContent = (n + 1) + ' / ' + totalSlides;
-                        }
+    <script>
+        let currentSlide = 0;
+        let isPlaying = false;
+        let playInterval;
+        const totalSlides = ${sortedPages.length};
+        const slideNames = ${JSON.stringify(sortedPages.map(p => p.name))};
 
-                        function nextSlide() {
-                          currentSlide = (currentSlide + 1) % totalSlides;
-                          showSlide(currentSlide);
-                        }
+        function showSlide(n) {
+            // Hide all slides
+            document.querySelectorAll('.slide').forEach(slide => {
+                slide.classList.remove('active');
+            });
+            
+            // Show current slide
+            document.getElementById('slide-' + n).classList.add('active');
+            
+            // Update info
+            document.getElementById('slideInfo').textContent = (n + 1) + ' / ' + totalSlides;
+            document.getElementById('progressBar').style.width = ((n + 1) / totalSlides * 100) + '%';
+            
+            // Update navigation buttons
+            document.getElementById('prevBtn').disabled = n === 0;
+            document.getElementById('nextBtn').disabled = n === totalSlides - 1;
+        }
 
-                        function prevSlide() {
-                          currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
-                          showSlide(currentSlide);
-                        }
+        function nextSlide() {
+            if (currentSlide < totalSlides - 1) {
+                currentSlide++;
+                showSlide(currentSlide);
+            }
+        }
 
-                        function toggleFullscreen() {
-                          if (!document.fullscreenElement) {
-                            document.documentElement.requestFullscreen();
-                          } else {
-                            document.exitFullscreen();
-                          }
-                        }
+        function prevSlide() {
+            if (currentSlide > 0) {
+                currentSlide--;
+                showSlide(currentSlide);
+            }
+        }
 
-                        document.addEventListener('keydown', (e) => {
-                          if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
-                          if (e.key === 'ArrowLeft') prevSlide();
-                          if (e.key === 'Escape') document.exitFullscreen();
-                        });
-                      </script>
-                    </body>
-                    </html>`;
+        function togglePlay() {
+            const playBtn = document.getElementById('playBtn');
+            if (isPlaying) {
+                clearInterval(playInterval);
+                playBtn.textContent = '▶ Auto Play';
+                isPlaying = false;
+            } else {
+                playInterval = setInterval(() => {
+                    if (currentSlide < totalSlides - 1) {
+                        nextSlide();
+                    } else {
+                        togglePlay(); // Stop at end
+                    }
+                }, 3000);
+                playBtn.textContent = '⏸ Stop';
+                isPlaying = true;
+            }
+        }
 
-                    updateProcessingJob(jobId, { message: 'Generating download...' });
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowRight':
+                case ' ':
+                    e.preventDefault();
+                    nextSlide();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    prevSlide();
+                    break;
+                case 'f':
+                case 'F11':
+                    e.preventDefault();
+                    toggleFullscreen();
+                    break;
+                case 'p':
+                    e.preventDefault();
+                    togglePlay();
+                    break;
+                case 'Escape':
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                    }
+                    break;
+                case 'Home':
+                    e.preventDefault();
+                    currentSlide = 0;
+                    showSlide(currentSlide);
+                    break;
+                case 'End':
+                    e.preventDefault();
+                    currentSlide = totalSlides - 1;
+                    showSlide(currentSlide);
+                    break;
+            }
+        });
+
+        // Touch/swipe support
+        let startX = 0;
+        let startY = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        });
+
+        document.addEventListener('touchend', (e) => {
+            if (!startX || !startY) return;
+            
+            const endX = e.changedTouches[0].clientX;
+            const endY = e.changedTouches[0].clientY;
+            
+            const diffX = startX - endX;
+            const diffY = startY - endY;
+            
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (diffX > 50) nextSlide(); // Swipe left
+                if (diffX < -50) prevSlide(); // Swipe right
+            }
+            
+            startX = 0;
+            startY = 0;
+        });
+
+        // Initialize
+        showSlide(0);
+    </script>
+</body>
+</html>`;
+
+                    updateProcessingJob(jobId, { message: 'Generating presentation file...' });
 
                     const blob = new Blob([presentationHTML], { type: 'text/html' });
                     const url = URL.createObjectURL(blob);
@@ -1266,7 +1431,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     link.click();
 
                     URL.revokeObjectURL(url);
-                    completeProcessingJob(jobId, 'completed', 'Presentation created successfully!');
+                    completeProcessingJob(jobId, 'completed', 'Interactive presentation created successfully!');
                   } catch (error) {
                     console.error('Error creating presentation:', error);
                     completeProcessingJob(jobId, 'error', 'Error creating presentation');
@@ -1289,148 +1454,116 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               </button>
               <button
                 onClick={async () => {
+                  if (pages.length === 0) {
+                    alert('No pages to share');
+                    return;
+                  }
+
+                  const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
+
                   try {
-                    if (pages.length === 0) {
-                      alert('🚨 Please add some pages first before sharing!');
-                      return;
-                    }
-
-                    const { jsPDF } = await import('jspdf');
+                    updateProcessingJob(jobId, { message: 'Creating PDF for sharing...' });
+                    
+                    const pdfDoc = await PDFDocument.create();
                     const sortedPages = pages.sort((a, b) => a.order - b.order);
-
-                    const pdf = new jsPDF();
-                    let isFirstPage = true;
 
                     for (let i = 0; i < sortedPages.length; i++) {
                       const page = sortedPages[i];
-                      
-                      if (!isFirstPage) {
-                        pdf.addPage();
+                      updateProcessingJob(jobId, {
+                        progress: i,
+                        message: `Processing page ${i + 1}/${sortedPages.length} for sharing`
+                      });
+
+                      const canvas = document.createElement('canvas');
+                      const ctx = canvas.getContext('2d')!;
+
+                      canvas.width = page.crop.width;
+                      canvas.height = page.crop.height;
+
+                      const img = new Image();
+                      img.src = page.imageData;
+                      await new Promise((resolve) => { img.onload = resolve; });
+
+                      ctx.save();
+                      if (page.rotation !== 0) {
+                        const centerX = canvas.width / 2;
+                        const centerY = canvas.height / 2;
+                        ctx.translate(centerX, centerY);
+                        ctx.rotate((page.rotation * Math.PI) / 180);
+                        ctx.translate(-centerX, -centerY);
                       }
-                      isFirstPage = false;
+                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                      ctx.restore();
 
-                      // Generate transformed image with rotation, cropping, and reordering
-                      const transformedImageData = await generateTransformedImage(page);
-
-                      const pageWidth = pdf.internal.pageSize.getWidth();
-                      const pageHeight = pdf.internal.pageSize.getHeight();
-
-                      // Use crop dimensions for aspect ratio calculation
-                      const imgAspectRatio = page.crop.width / page.crop.height;
-                      const pageAspectRatio = pageWidth / pageHeight;
-
-                      let imgWidth, imgHeight;
-                      if (imgAspectRatio > pageAspectRatio) {
-                        imgWidth = pageWidth - 20;
-                        imgHeight = imgWidth / imgAspectRatio;
-                      } else {
-                        imgHeight = pageHeight - 20;
-                        imgWidth = imgHeight * imgAspectRatio;
-                      }
-
-                      const x = (pageWidth - imgWidth) / 2;
-                      const y = (pageHeight - imgHeight) / 2;
-
-                      try {
-                        pdf.addImage(transformedImageData, 'PNG', x, y, imgWidth, imgHeight, undefined, 'FAST');
-                      } catch (imageError) {
-                        console.warn(`Failed to add page ${i} to PDF:`, imageError);
-                        continue;
-                      }
+                      const imageBytes = canvas.toDataURL('image/png');
+                      const pngImage = await pdfDoc.embedPng(imageBytes);
+                      const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
+                      pdfPage.drawImage(pngImage, {
+                        x: 0,
+                        y: 0,
+                        width: canvas.width,
+                        height: canvas.height
+                      });
                     }
 
-                    const sessionName = activeSession.name.replace(/[^a-zA-Z0-9-_]/g, '_');
-                    const filename = `${sessionName}_enhanced_${new Date().toISOString().slice(0, 10)}.pdf`;
+                    updateProcessingJob(jobId, { message: 'Preparing PDF for sharing...' });
+                    const pdfBytes = await pdfDoc.save();
+                    const filename = `${activeSession.name.replace(/\s+/g, '_')}.pdf`;
+                    const pdfFile = new File([pdfBytes], filename, { type: 'application/pdf' });
 
-                    const pdfBlob = pdf.output('blob');
-
-                    // Create downloadable blob URL for sharing
-                    const blobUrl = URL.createObjectURL(pdfBlob);
-
-                    if (navigator.share) {
+                    if (navigator.share && navigator.canShare({ files: [pdfFile] })) {
                       try {
-                        // Try sharing with file first
-                        if (navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
-                          await navigator.share({
-                            title: '🎨 Enhanced PDF Pages',
-                            text: 'Check out these digitally enhanced PDF pages!',
-                            files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
-                          });
-                        } else {
-                          // Fallback: share with URL and auto-download
-                          const downloadLink = document.createElement('a');
-                          downloadLink.href = blobUrl;
-                          downloadLink.download = filename;
-                          downloadLink.style.display = 'none';
-                          document.body.appendChild(downloadLink);
-                          downloadLink.click();
-                          document.body.removeChild(downloadLink);
-                          
-                          await navigator.share({
-                            title: '🎨 Enhanced PDF Pages',
-                            text: `Check out these ${sortedPages.length} digitally enhanced PDF pages!`,
-                            url: window.location.href
-                          });
-                        }
+                        await navigator.share({
+                          title: `${activeSession.name} - PDF Master`,
+                          text: `Check out my PDF with ${pages.length} pages created using PDF Master!`,
+                          files: [pdfFile]
+                        });
+                        completeProcessingJob(jobId, 'completed', 'PDF shared successfully!');
                       } catch (shareError: any) {
                         if (shareError.name !== 'AbortError') {
-                          // Auto-download if share fails
-                          const downloadLink = document.createElement('a');
-                          downloadLink.href = blobUrl;
-                          downloadLink.download = filename;
-                          downloadLink.style.display = 'none';
-                          document.body.appendChild(downloadLink);
-                          downloadLink.click();
-                          document.body.removeChild(downloadLink);
+                          console.log('Share cancelled or failed:', shareError);
+                          // Fallback to download
+                          const url = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = filename;
+                          link.click();
+                          URL.revokeObjectURL(url);
+                          completeProcessingJob(jobId, 'completed', 'PDF downloaded (sharing not supported)');
+                        } else {
+                          completeProcessingJob(jobId, 'completed', 'Share cancelled');
                         }
                       }
                     } else {
-                      // No share API: auto-download and show share instructions
-                      const downloadLink = document.createElement('a');
-                      downloadLink.href = blobUrl;
-                      downloadLink.download = filename;
-                      downloadLink.style.display = 'none';
-                      document.body.appendChild(downloadLink);
-                      downloadLink.click();
-                      document.body.removeChild(downloadLink);
-                      
-                      // Show share options
-                      const shareText = `Check out my ${sortedPages.length} enhanced PDF pages created with PDF Master!`;
-                      if (navigator.clipboard) {
-                        try {
-                          await navigator.clipboard.writeText(shareText);
-                          alert('📄 PDF downloaded! Share text copied to clipboard - paste it anywhere to share!');
-                        } catch {
-                          prompt('📄 PDF downloaded! Copy this text to share:', shareText);
-                        }
-                      } else {
-                        prompt('📄 PDF downloaded! Copy this text to share:', shareText);
-                      }
+                      // Fallback to download if sharing not supported
+                      const url = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = filename;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                      completeProcessingJob(jobId, 'completed', 'PDF downloaded (sharing not supported)');
                     }
-
-                    // Cleanup blob URL
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                   } catch (error) {
-                    console.error('Error sharing PDF:', error);
-                    alert('❌ Error creating PDF. Please try again or check your pages.');
+                    console.error('Error creating PDF for sharing:', error);
+                    completeProcessingJob(jobId, 'error', 'Error creating PDF for sharing');
                   }
                 }}
+                disabled={isCurrentSessionProcessing}
                 style={{
-                  background: '#007bff',
+                  background: 'linear-gradient(45deg, #007bff, #0056b3)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 16px',
                   color: 'white',
-                  cursor: 'pointer',
+                  cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
                   fontWeight: 'bold',
-                  fontSize: '12px'
+                  fontSize: '12px',
+                  opacity: isCurrentSessionProcessing ? 0.7 : 1
                 }}
               >
-                📲 Share Enhanced PDF
+                📤 Share PDF
               </button>
-              <div style={{ marginTop: '5px', textAlign: 'center' }}>
-                <small style={{ color: '#666', fontSize: '11px' }}>📋 Share without downloading to device</small>
-              </div>
             </>
           )}
         </div>
@@ -1531,7 +1664,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               Upload images to create a PDF document or upload an existing PDF to edit its pages. 
               You can rotate, crop, reorder, and manipulate pages with full control.
             </p>
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '16px' }}>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 style={{
@@ -1551,7 +1684,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               <button
                 onClick={() => folderInputRef.current?.click()}
                 style={{
-                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
                   border: 'none',
                   borderRadius: '12px',
                   padding: '16px 32px',
@@ -1562,7 +1695,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
                 }}
               >
-                📂 Upload Folder
+                📁 Upload Folder
               </button>
               <button
                 onClick={() => pdfInputRef.current?.click()}
@@ -1906,16 +2039,16 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                             background: floatingPages[page.id]?.visible ? "#f44336" : "#2196F3",
                             color: "white",
                             border: "none",
-                            padding: "4px 8px",
+                            padding: "6px 10px",
                             borderRadius: "50%",
                             cursor: "pointer",
-                            fontSize: "12px",
+                            fontSize: "16px",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            width: "28px",
-                            height: "28px",
-                            boxShadow: "0 2px 5px rgba(0,0,0,0.3)"
+                            width: "40px",
+                            height: "40px",
+                            boxShadow: "0 3px 8px rgba(0,0,0,0.4)"
                           }}
                           title={floatingPages[page.id]?.visible ? "Close floating view" : "Open floating view"}
                         >
