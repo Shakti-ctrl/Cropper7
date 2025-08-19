@@ -1313,7 +1313,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                         }
                       }
                     } else {
-                      // Fallback - just show message, no auto download
+                      // Fallback - just show message, no auto download (exactly like cropper)
                       completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
                     }
                   } catch (error) {
