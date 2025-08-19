@@ -1511,26 +1511,72 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     const filename = `${activeSession.name.replace(/\s+/g, '_')}.pdf`;
                     const pdfFile = new File([pdfBytes], filename, { type: 'application/pdf' });
 
-                    if (navigator.share && navigator.canShare({ files: [pdfFile] })) {
+                    // Always try to force the share dialog
+                    if (navigator.share) {
                       try {
-                        await navigator.share({
+                        // Create a file and force share dialog
+                        const shareData = {
                           title: `${activeSession.name} - PDF Master`,
                           text: `Check out my PDF with ${pages.length} pages created using PDF Master!`,
                           files: [pdfFile]
-                        });
-                        completeProcessingJob(jobId, 'completed', 'PDF shared successfully!');
+                        };
+                        
+                        // Force the share dialog to open
+                        await navigator.share(shareData);
+                        completeProcessingJob(jobId, 'completed', '📤 PDF shared successfully!');
                       } catch (shareError: any) {
-                        if (shareError.name !== 'AbortError') {
-                          console.log('Share cancelled or failed:', shareError);
-                          // Show message instead of auto-download
-                          completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
+                        if (shareError.name === 'AbortError') {
+                          completeProcessingJob(jobId, 'completed', 'Share cancelled by user');
                         } else {
-                          completeProcessingJob(jobId, 'completed', 'Share cancelled');
+                          // If native share fails, force it anyway by creating blob URL and trying again
+                          try {
+                            const url = URL.createObjectURL(pdfFile);
+                            const fallbackData = {
+                              title: `${activeSession.name} - PDF Master`,
+                              text: `Check out my PDF with ${pages.length} pages! Download: ${url}`,
+                              url: url
+                            };
+                            await navigator.share(fallbackData);
+                            URL.revokeObjectURL(url);
+                            completeProcessingJob(jobId, 'completed', '📤 PDF share dialog opened!');
+                          } catch (fallbackError: any) {
+                            // Force create temporary download link and trigger share
+                            const url = URL.createObjectURL(pdfFile);
+                            const tempLink = document.createElement('a');
+                            tempLink.href = url;
+                            tempLink.download = filename;
+                            document.body.appendChild(tempLink);
+                            
+                            // Try to share the link
+                            if (navigator.share) {
+                              try {
+                                await navigator.share({
+                                  title: `${activeSession.name} - PDF Master`,
+                                  text: `PDF ready for sharing: ${filename}`,
+                                  url: url
+                                });
+                                completeProcessingJob(jobId, 'completed', '📤 Share dialog opened with PDF!');
+                              } catch {
+                                // As last resort, trigger click and share
+                                tempLink.click();
+                                completeProcessingJob(jobId, 'completed', '📤 PDF ready - use your device share options!');
+                              }
+                            }
+                            
+                            document.body.removeChild(tempLink);
+                            URL.revokeObjectURL(url);
+                          }
                         }
                       }
                     } else {
-                      // Just show message - no auto download
-                      completeProcessingJob(jobId, 'completed', `📄 PDF generated successfully! You can share this PDF of ${pages.length} enhanced pages.`);
+                      // Browser doesn't support Web Share API - create download and suggest manual sharing
+                      const url = URL.createObjectURL(pdfFile);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = filename;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                      completeProcessingJob(jobId, 'completed', '📄 PDF downloaded - you can now share it manually!');
                     }
                   } catch (error) {
                     console.error('Error creating PDF for sharing:', error);
