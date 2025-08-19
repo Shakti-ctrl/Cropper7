@@ -7,6 +7,8 @@ import AdjustmentsPanel from "../component/AdjustmentsPanel";
 import EffectFilters from "../component/EffectFilters";
 import QualityPanel from "../component/QualityPanel";
 import A2HSButton from "../A2HSButton";
+import { PDFMaster } from "../components/PDFMaster";
+import { VirtualKeyboard, FloatingKeyboardButton } from "../components/VirtualKeyboard";
 
 // Helper function for async image loading
 const loadImageAsync = (src: string): Promise<HTMLImageElement> => {
@@ -609,6 +611,19 @@ const DraggablePanel = ({
 };
 
 function Main({ appName, aboutText } :any) {
+    // PDF Master and Mode Toggle
+    const [currentMode, setCurrentMode] = useState<'cropper' | 'pdfmaster'>('cropper');
+    const [showPDFMaster, setShowPDFMaster] = useState(false);
+    
+    // Virtual Keyboard
+    const [showVirtualKeyboard, setShowVirtualKeyboard] = useState(false);
+    const [keyboardOpacity, setKeyboardOpacity] = useState(80);
+    const [keyboardPosition, setKeyboardPosition] = useState({ x: 100, y: 100 });
+    const [keyboardSize, setKeyboardSize] = useState({ width: 800, height: 300 });
+    const [keyboardButtonPosition, setKeyboardButtonPosition] = useState({ x: 50, y: 50 });
+    const [keyboardButtonOpacity, setKeyboardButtonOpacity] = useState(90);
+    const [showKeyboardOptions, setShowKeyboardOptions] = useState(false);
+
     // Tab management
     const [tabs, setTabs] = useState<CropTab[]>([{
         id: 'tab-1',
@@ -3216,27 +3231,78 @@ const generateFallbackPreview = () => {
                     </button>
                 </div>
 
-                {/* View Toggle */}
+                {/* Mode Toggle */}
                 <div style={{
                     display: "flex",
                     gap: "8px",
                     padding: "10px",
                     background: "linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))",
                     borderBottom: "1px solid rgba(0, 255, 255, 0.2)",
-                    boxShadow: "0 1px 10px rgba(0, 255, 255, 0.1)"
+                    boxShadow: "0 1px 10px rgba(0, 255, 255, 0.1)",
+                    alignItems: "center",
+                    justifyContent: "space-between"
                 }}>
-                    <button
-                        onClick={() => setCurrentView('crop')}
-                        className={currentView === 'crop' ? 'export-button' : 'button'}
-                    >
-                        🖼️ Cropping
-                    </button>
-                    <button
-                        onClick={() => setCurrentView('history')}
-                        className={currentView === 'history' ? 'export-button' : 'button'}
-                    >
-                        📜 History ({history.length})
-                    </button>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                            onClick={() => {
+                                setCurrentMode('cropper');
+                                setShowPDFMaster(false);
+                            }}
+                            className={currentMode === 'cropper' ? 'export-button' : 'button'}
+                            style={{
+                                background: currentMode === 'cropper' 
+                                    ? 'linear-gradient(45deg, #4CAF50, #45a049)' 
+                                    : 'linear-gradient(45deg, #666, #555)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '10px 16px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                boxShadow: currentMode === 'cropper' ? '0 4px 12px rgba(76, 175, 80, 0.3)' : 'none'
+                            }}
+                        >
+                            🖼️ Image Cropper
+                        </button>
+                        <button
+                            onClick={() => {
+                                setCurrentMode('pdfmaster');
+                                setShowPDFMaster(true);
+                            }}
+                            className={currentMode === 'pdfmaster' ? 'export-button' : 'button'}
+                            style={{
+                                background: currentMode === 'pdfmaster' 
+                                    ? 'linear-gradient(45deg, #FF9800, #F57C00)' 
+                                    : 'linear-gradient(45deg, #666, #555)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '10px 16px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                boxShadow: currentMode === 'pdfmaster' ? '0 4px 12px rgba(255, 152, 0, 0.3)' : 'none'
+                            }}
+                        >
+                            📄 PDF Master
+                        </button>
+                    </div>
+                    
+                    {currentMode === 'cropper' && (
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                                onClick={() => setCurrentView('crop')}
+                                className={currentView === 'crop' ? 'export-button' : 'button'}
+                            >
+                                🖼️ Cropping
+                            </button>
+                            <button
+                                onClick={() => setCurrentView('history')}
+                                className={currentView === 'history' ? 'export-button' : 'button'}
+                            >
+                                📜 History ({history.length})
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Background Processing Jobs */}
@@ -5972,6 +6038,88 @@ const generateFallbackPreview = () => {
                         </div>
                     </div>
                 )}
+
+                {/* PDF Master Component */}
+                <PDFMaster 
+                    isVisible={showPDFMaster}
+                    onClose={() => {
+                        setShowPDFMaster(false);
+                        setCurrentMode('cropper');
+                    }}
+                />
+
+                {/* Virtual Keyboard System */}
+                <FloatingKeyboardButton
+                    onClick={() => setShowVirtualKeyboard(true)}
+                    onRightClick={(e) => {
+                        e.preventDefault();
+                        setShowKeyboardOptions(!showKeyboardOptions);
+                    }}
+                    position={keyboardButtonPosition}
+                    onPositionChange={setKeyboardButtonPosition}
+                    opacity={keyboardButtonOpacity}
+                />
+
+                {/* Keyboard Options Panel */}
+                {showKeyboardOptions && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            left: `${keyboardButtonPosition.x + 60}px`,
+                            top: `${keyboardButtonPosition.y}px`,
+                            background: 'rgba(0,0,0,0.9)',
+                            border: '1px solid #666',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            zIndex: 9998,
+                            minWidth: '200px'
+                        }}
+                    >
+                        <div style={{ color: 'white', marginBottom: '8px', fontSize: '12px', fontWeight: 'bold' }}>
+                            Keyboard Options
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ color: '#ccc', fontSize: '11px', minWidth: '50px' }}>Opacity:</span>
+                            <input
+                                type="range"
+                                min="20"
+                                max="100"
+                                value={keyboardButtonOpacity}
+                                onChange={(e) => setKeyboardButtonOpacity(Number(e.target.value))}
+                                style={{ flex: 1 }}
+                            />
+                            <span style={{ color: '#ccc', fontSize: '11px', minWidth: '30px' }}>
+                                {keyboardButtonOpacity}%
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setShowKeyboardOptions(false)}
+                            style={{
+                                background: '#666',
+                                border: 'none',
+                                borderRadius: '4px',
+                                color: 'white',
+                                padding: '4px 8px',
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Close
+                        </button>
+                    </div>
+                )}
+
+                <VirtualKeyboard
+                    isVisible={showVirtualKeyboard}
+                    onClose={() => setShowVirtualKeyboard(false)}
+                    opacity={keyboardOpacity}
+                    onOpacityChange={setKeyboardOpacity}
+                    position={keyboardPosition}
+                    onPositionChange={setKeyboardPosition}
+                    size={keyboardSize}
+                    onSizeChange={setKeyboardSize}
+                />
             </>
         </div>
     );

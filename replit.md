@@ -14,6 +14,18 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (August 2025)
 
+### PDF Master System Implementation (Latest)
+- **Toggle Interface**: Added toggle button to switch between Image Cropper and PDF Master modes
+- **Image to PDF Conversion**: Complete system for uploading images/folders and converting to PDF with advanced editing
+- **PDF Processing**: Upload PDF files and extract pages for individual editing
+- **Page Management**: Rotate, crop, reorder, and reverse functionality for all pages
+- **Session Management**: Independent session system with custom naming for PDF projects
+- **Floating Interface**: Advanced floating windows system matching cropper's design
+- **Virtual Keyboard**: Comprehensive floating keyboard with full PC functionality, draggable and resizable
+- **Complete Separation**: PDF Master runs independently without affecting existing cropper functionality
+
+## Recent Changes (August 2025)
+
 ### PDF Generation and Image Processing Fixes (Latest)
 - **Fixed Async Image Loading**: Resolved critical issue where watermarks and signatures weren't appearing in PDF exports due to asynchronous image loading not being properly awaited
 - **Enhanced Font Scaling**: Improved text size scaling to actually increase font size rather than just container size, with 1.5x base multiplier for better visibility
@@ -38,6 +50,14 @@ Preferred communication style: Simple, everyday language.
 - **Full-Width Design**: Removed CSS max-width constraints (600px) to utilize complete screen width
 - **Responsive Flexbox**: Inspiration section expanded to flex:3, shortcuts section optimized to flex:1 for better space distribution
 - **Container Optimization**: All containers now use full width with proper box-sizing and stretch alignment
+
+### PDF Master Architecture
+- **Dual Mode System**: Toggle-based interface switching between Image Cropper and PDF Master
+- **PDF Processing Engine**: Client-side PDF manipulation using PDF-lib and pdfjs-dist
+- **Page Management**: Advanced page editing with rotate, crop, reorder, and batch reverse operations
+- **Virtual Keyboard System**: Full-featured floating keyboard with PC-level functionality and customization
+- **Independent Sessions**: Separate session management system for PDF projects with custom naming
+- **Advanced UI**: Floating panels, draggable elements, and responsive design matching cropper quality
 
 ## System Architecture
 

@@ -1474,6 +1474,27 @@
   resolved "https://registry.npmjs.org/@leichtgewicht/ip-codec/-/ip-codec-2.0.4.tgz"
   integrity sha512-Hcv+nVC0kZnQ3tD9GVu5xSMR4VVYOteQIr/hwFPVEvPdlXqgGEuRjiheChHgdM+JyqdgNcmzZOX/tnl0JOiI7A==
 
+"@napi-rs/canvas-linux-x64-gnu@0.1.77":
+  version "0.1.77"
+  resolved "https://registry.npmjs.org/@napi-rs/canvas-linux-x64-gnu/-/canvas-linux-x64-gnu-0.1.77.tgz"
+  integrity sha512-Lt6Sef5l0+5O1cSZ8ysO0JI+x+rSrqZyXs5f7+kVkCAOVq8X5WTcDVbvWvEs2aRhrWTp5y25Jf2Bn+3IcNHOuQ==
+
+"@napi-rs/canvas@^0.1.74":
+  version "0.1.77"
+  resolved "https://registry.npmjs.org/@napi-rs/canvas/-/canvas-0.1.77.tgz"
+  integrity sha512-N9w2DkEKE1AXGp3q55GBOP6BEoFrqChDiFqJtKViTpQCWNOSVuMz7LkoGehbnpxtidppbsC36P0kCZNqJKs29w==
+  optionalDependencies:
+    "@napi-rs/canvas-android-arm64" "0.1.77"
+    "@napi-rs/canvas-darwin-arm64" "0.1.77"
+    "@napi-rs/canvas-darwin-x64" "0.1.77"
+    "@napi-rs/canvas-linux-arm-gnueabihf" "0.1.77"
+    "@napi-rs/canvas-linux-arm64-gnu" "0.1.77"
+    "@napi-rs/canvas-linux-arm64-musl" "0.1.77"
+    "@napi-rs/canvas-linux-riscv64-gnu" "0.1.77"
+    "@napi-rs/canvas-linux-x64-gnu" "0.1.77"
+    "@napi-rs/canvas-linux-x64-musl" "0.1.77"
+    "@napi-rs/canvas-win32-x64-msvc" "0.1.77"
+
 "@nodelib/fs.scandir@2.1.5":
   version "2.1.5"
   resolved "https://registry.npmjs.org/@nodelib/fs.scandir/-/fs.scandir-2.1.5.tgz"
@@ -1494,6 +1515,20 @@
   dependencies:
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
+
+"@pdf-lib/standard-fonts@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.npmjs.org/@pdf-lib/standard-fonts/-/standard-fonts-1.0.0.tgz"
+  integrity sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==
+  dependencies:
+    pako "^1.0.6"
+
+"@pdf-lib/upng@^1.0.1":
+  version "1.0.1"
+  resolved "https://registry.npmjs.org/@pdf-lib/upng/-/upng-1.0.1.tgz"
+  integrity sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==
+  dependencies:
+    pako "^1.0.10"
 
 "@pmmmwh/react-refresh-webpack-plugin@^0.5.3":
   version "0.5.7"
@@ -6667,7 +6702,7 @@ p-try@^2.0.0:
   resolved "https://registry.npmjs.org/p-try/-/p-try-2.2.0.tgz"
   integrity sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ==
 
-pako@~1.0.2:
+pako@^1.0.10, pako@^1.0.11, pako@^1.0.6, pako@~1.0.2:
   version "1.0.11"
   resolved "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz"
   integrity sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==
@@ -6749,6 +6784,23 @@ path-type@^4.0.0:
   version "4.0.0"
   resolved "https://registry.npmjs.org/path-type/-/path-type-4.0.0.tgz"
   integrity sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==
+
+pdf-lib@^1.17.1:
+  version "1.17.1"
+  resolved "https://registry.npmjs.org/pdf-lib/-/pdf-lib-1.17.1.tgz"
+  integrity sha512-V/mpyJAoTsN4cnP31vc0wfNA1+p20evqqnap0KLoRUN0Yk/p3wN52DOEsL4oBFcLdb76hlpKPtzJIgo67j/XLw==
+  dependencies:
+    "@pdf-lib/standard-fonts" "^1.0.0"
+    "@pdf-lib/upng" "^1.0.1"
+    pako "^1.0.11"
+    tslib "^1.11.1"
+
+pdfjs-dist@^5.4.54:
+  version "5.4.54"
+  resolved "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-5.4.54.tgz"
+  integrity sha512-TBAiTfQw89gU/Z4LW98Vahzd2/LoCFprVGvGbTgFt+QCB1F+woyOPmNNVgLa6djX9Z9GGTnj7qE1UzpOVJiINw==
+  optionalDependencies:
+    "@napi-rs/canvas" "^0.1.74"
 
 performance-now@^2.1.0:
   version "2.1.0"
@@ -8728,6 +8780,11 @@ tsconfig-paths@^3.14.1:
     json5 "^1.0.1"
     minimist "^1.2.6"
     strip-bom "^3.0.0"
+
+tslib@^1.11.1:
+  version "1.14.1"
+  resolved "https://registry.npmjs.org/tslib/-/tslib-1.14.1.tgz"
+  integrity sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==
 
 tslib@^1.8.1:
   version "1.14.1"
