@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
@@ -55,7 +54,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
-  
+
   // Exact same floating and zoom functionality as cropper
   const [floatingPages, setFloatingPages] = useState<{[key: string]: {visible: boolean, position: {x: number, y: number}, size: {width: number, height: number}}}>({});
   const [zoomedPages, setZoomedPages] = useState<Set<string>>(new Set());
@@ -74,7 +73,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
   const saveCurrentSession = useCallback(() => {
     if (!activeSession) return;
-    
+
     try {
       setSessions(prev => prev.map(session => 
         session.id === activeSessionId 
@@ -117,7 +116,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     if (sessions.length === 1) return; // Don't close last session
 
     setSessions(prev => prev.filter(s => s.id !== sessionId));
-    
+
     if (sessionId === activeSessionId) {
       const remainingSessions = sessions.filter(s => s.id !== sessionId);
       if (remainingSessions.length > 0) {
@@ -169,7 +168,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           img.onload = () => {
             const maxDimension = 1500;
             let { naturalWidth: width, naturalHeight: height } = img;
-            
+
             if (width > maxDimension || height > maxDimension) {
               const scale = maxDimension / Math.max(width, height);
               width = Math.round(width * scale);
@@ -207,10 +206,10 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
     setIsProcessing(true);
     setProcessingStatus(`Processing ${files.length} files...`);
-    
+
     try {
       const newPages: PDFPage[] = [];
-      
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.type.startsWith('image/')) {
@@ -242,13 +241,13 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
     setIsProcessing(true);
     setProcessingStatus('Processing PDF...');
-    
+
     try {
       for (const file of files) {
         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
           try {
             const arrayBuffer = await file.arrayBuffer();
-            
+
             // Configure PDF.js to use local worker
             const loadingTask = pdfjs.getDocument({
               data: arrayBuffer,
@@ -256,24 +255,24 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               isEvalSupported: false,
               useSystemFonts: true
             });
-            
+
             const pdf = await loadingTask.promise;
             const newPages: PDFPage[] = [];
-            
+
             for (let i = 1; i <= pdf.numPages; i++) {
               setProcessingStatus(`Extracting page ${i}/${pdf.numPages}`);
-              
+
               try {
                 const page = await pdf.getPage(i);
                 const viewport = page.getViewport({ scale: 1.5 });
-                
+
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
                 if (!context) {
                   console.error('Could not get canvas context');
                   continue;
                 }
-                
+
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
 
@@ -284,9 +283,9 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 };
 
                 await page.render(renderContext).promise;
-                
+
                 const imageData = canvas.toDataURL('image/jpeg', 0.8);
-                
+
                 const pdfPage: PDFPage = {
                   id: `pdf_page_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
                   name: `${file.name.replace('.pdf', '')}_page_${i}`,
@@ -297,14 +296,14 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   width: viewport.width,
                   height: viewport.height
                 };
-                
+
                 newPages.push(pdfPage);
               } catch (pageError) {
                 console.error(`Error processing page ${i}:`, pageError);
                 setProcessingStatus(`Error processing page ${i}, continuing...`);
               }
             }
-            
+
             if (newPages.length > 0) {
               setPages(prev => [...prev, ...newPages]);
               setProcessingStatus(`Successfully extracted ${newPages.length} pages from ${file.name}`);
@@ -317,7 +316,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           }
         }
       }
-      
+
       setTimeout(() => setProcessingStatus(''), 3000);
     } catch (error) {
       console.error('Error in PDF upload:', error);
@@ -417,7 +416,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const applyInputRearrange = () => {
     try {
       const newOrder = rearrangeInput.split(',').map(num => parseInt(num.trim()) - 1);
-      
+
       if (newOrder.length !== pages.length) {
         alert(`Please provide exactly ${pages.length} positions`);
         return;
@@ -448,14 +447,14 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
     setIsProcessing(true);
     setProcessingStatus('Creating PDF...');
-    
+
     try {
       const pdfDoc = await PDFDocument.create();
 
       for (const page of pages.sort((a, b) => a.order - b.order)) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
-        
+
         canvas.width = page.crop.width;
         canvas.height = page.crop.height;
 
@@ -488,12 +487,12 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      
+
       const link = document.createElement('a');
       link.href = url;
       link.download = `${activeSession.name.replace(/\s+/g, '_')}.pdf`;
       link.click();
-      
+
       URL.revokeObjectURL(url);
       setProcessingStatus('PDF exported successfully!');
       setTimeout(() => setProcessingStatus(''), 2000);
@@ -531,7 +530,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const toggleFloating = (pageId: string) => {
     setFloatingPages(prev => {
       const isCurrentlyFloating = prev[pageId]?.visible || false;
-      
+
       if (isCurrentlyFloating) {
         return {
           ...prev,
@@ -583,7 +582,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     const handleMouseMove = (e: MouseEvent) => {
       const newX = e.clientX - offsetX;
       const newY = e.clientY - offsetY;
-      
+
       setFloatingPages(prev => ({
         ...prev,
         [pageId]: {
@@ -632,7 +631,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             📄 PDF Master
           </h1>
         </div>
-        
+
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -650,7 +649,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           >
             📁 Upload Images
           </button>
-          
+
           <button
             onClick={() => pdfInputRef.current?.click()}
             disabled={isProcessing}
@@ -667,7 +666,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           >
             📄 Upload PDF
           </button>
-          
+
           <button
             onClick={onClose}
             style={{
@@ -830,7 +829,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             <h3 style={{ color: '#00bfff', textAlign: 'center', marginBottom: '24px' }}>
               Choose Rearrange Method
             </h3>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <button
                 onClick={startArrowRearrange}
@@ -851,7 +850,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 🔄 Rearrange with Arrow Buttons
               </button>
-              
+
               <button
                 onClick={startInputRearrange}
                 style={{
@@ -871,7 +870,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 ⌨️ Rearrange with Input Numbers
               </button>
-              
+
               <button
                 onClick={() => setShowRearrangeOptions(false)}
                 style={{
@@ -919,7 +918,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             <p style={{ color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', marginBottom: '24px', fontSize: '14px' }}>
               Enter the new order using comma-separated numbers (1 to {pages.length}):
             </p>
-            
+
             <input
               type="text"
               value={rearrangeInput}
@@ -936,7 +935,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 marginBottom: '20px'
               }}
             />
-            
+
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button
                 onClick={applyInputRearrange}
@@ -1065,6 +1064,162 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 }}
               >
                 💾 Export PDF
+              </button>
+              <button
+                onClick={async () => {
+                  if (pages.length === 0) {
+                    alert('No pages to create presentation');
+                    return;
+                  }
+
+                  setIsProcessing(true);
+                  setProcessingStatus('Creating presentation...');
+
+                  try {
+                    // Create HTML presentation
+                    const presentationHTML = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <title>${activeSession.name} - Presentation</title>
+                      <style>
+                        body { margin: 0; padding: 0; background: #000; font-family: Arial, sans-serif; }
+                        .slide { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; }
+                        .slide img { max-width: 90vw; max-height: 90vh; object-fit: contain; }
+                        .controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px; }
+                        .btn { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+                        .slide-number { position: fixed; top: 20px; right: 20px; color: white; font-size: 18px; z-index: 1000; }
+                        .hidden { display: none; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="slide-number" id="slideNumber">1 / ${pages.length}</div>
+                      ${pages.map((page, index) => `
+                        <div class="slide ${index > 0 ? 'hidden' : ''}" id="slide-${index}">
+                          <img src="${page.imageData}" alt="${page.name}" style="transform: rotate(${page.rotation}deg);" />
+                        </div>
+                      `).join('')}
+                      <div class="controls">
+                        <button class="btn" onclick="prevSlide()">← Previous</button>
+                        <button class="btn" onclick="nextSlide()">Next →</button>
+                        <button class="btn" onclick="toggleFullscreen()">Fullscreen</button>
+                      </div>
+                      <script>
+                        let currentSlide = 0;
+                        const totalSlides = ${pages.length};
+
+                        function showSlide(n) {
+                          document.querySelectorAll('.slide').forEach(slide => slide.classList.add('hidden'));
+                          document.getElementById('slide-' + n).classList.remove('hidden');
+                          document.getElementById('slideNumber').textContent = (n + 1) + ' / ' + totalSlides;
+                        }
+
+                        function nextSlide() {
+                          currentSlide = (currentSlide + 1) % totalSlides;
+                          showSlide(currentSlide);
+                        }
+
+                        function prevSlide() {
+                          currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
+                          showSlide(currentSlide);
+                        }
+
+                        function toggleFullscreen() {
+                          if (!document.fullscreenElement) {
+                            document.documentElement.requestFullscreen();
+                          } else {
+                            document.exitFullscreen();
+                          }
+                        }
+
+                        document.addEventListener('keydown', (e) => {
+                          if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+                          if (e.key === 'ArrowLeft') prevSlide();
+                          if (e.key === 'Escape') document.exitFullscreen();
+                        });
+                      </script>
+                    </body>
+                    </html>`;
+
+                    const blob = new Blob([presentationHTML], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${activeSession.name.replace(/\s+/g, '_')}_presentation.html`;
+                    link.click();
+
+                    URL.revokeObjectURL(url);
+                    setProcessingStatus('Presentation created successfully!');
+                    setTimeout(() => setProcessingStatus(''), 2000);
+                  } catch (error) {
+                    console.error('Error creating presentation:', error);
+                    setProcessingStatus('Error creating presentation');
+                    setTimeout(() => setProcessingStatus(''), 3000);
+                  } finally {
+                    setIsProcessing(false);
+                  }
+                }}
+                disabled={isProcessing}
+                style={{
+                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  color: 'white',
+                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '12px',
+                  opacity: isProcessing ? 0.7 : 1
+                }}
+              >
+                🎥 Create Presentation
+              </button>
+              <button
+                onClick={async () => {
+                  if (pages.length === 0) {
+                    alert('No pages to share');
+                    return;
+                  }
+
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({
+                        title: `${activeSession.name} - PDF Master`,
+                        text: `Check out my PDF presentation with ${pages.length} pages created using PDF Master!`,
+                        url: window.location.href
+                      });
+                    } catch (error) {
+                      console.log('Share cancelled or failed:', error);
+                    }
+                  } else {
+                    const shareText = `Check out my PDF presentation "${activeSession.name}" with ${pages.length} pages created using PDF Master! ${window.location.href}`;
+
+                    if (navigator.clipboard) {
+                      try {
+                        await navigator.clipboard.writeText(shareText);
+                        alert('Share text copied to clipboard!');
+                      } catch (error) {
+                        console.error('Failed to copy to clipboard:', error);
+                        prompt('Copy this text to share:', shareText);
+                      }
+                    } else {
+                      prompt('Copy this text to share:', shareText);
+                    }
+                  }
+                }}
+                style={{
+                  background: 'linear-gradient(45deg, #007bff, #0056b3)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '12px'
+                }}
+              >
+                📲 Share Enhanced PDF
               </button>
             </>
           )}
@@ -1258,7 +1413,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       opacity: rearrangeMode ? 0.7 : 1
                     }}
                   />
-                  
+
                   {/* ALL DIRECTIONAL Rearrange buttons - up, down, left, right */}
                   {rearrangeMode && (
                     <div style={{
@@ -1464,8 +1619,8 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           }}
                           style={{
                             background: floatingPages[page.id]?.visible ? "#f44336" : "#2196F3",
-                            border: "none",
                             color: "white",
+                            border: "none",
                             padding: "4px 8px",
                             borderRadius: "50%",
                             cursor: "pointer",
@@ -1603,7 +1758,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               {(() => {
                 const page = pages.find(p => p.id === pageId);
                 if (!page) return <div>Page not found</div>;
-                
+
                 return (
                   <div style={{
                     flex: 1,
@@ -1628,7 +1783,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   </div>
                 );
               })()}
-              
+
               {/* Control buttons - same as cropper */}
               <div style={{ 
                 display: 'flex', 
