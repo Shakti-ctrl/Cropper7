@@ -30,6 +30,18 @@ interface PDFSession {
   modifiedAt: number;
 }
 
+interface ProcessingJob {
+  id: string;
+  sessionId: string;
+  sessionName: string;
+  type: 'pdf' | 'presentation' | 'upload';
+  status: 'processing' | 'completed' | 'error';
+  progress: number;
+  total: number;
+  message: string;
+  timestamp: number;
+}
+
 interface PDFMasterProps {
   isVisible: boolean;
   onClose: () => void;
@@ -48,12 +60,19 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState('');
 
+  // Global processing queue for all sessions
+  const [processingJobs, setProcessingJobs] = useState<ProcessingJob[]>([]);
+  const [globalProcessingCount, setGlobalProcessingCount] = useState(0);
+
   // Current session data
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
   const [pages, setPages] = useState<PDFPage[]>(activeSession.pages);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState('');
+  
+  // Check if current session has any processing jobs
+  const currentSessionJobs = processingJobs.filter(job => job.sessionId === activeSessionId);
+  const isCurrentSessionProcessing = currentSessionJobs.some(job => job.status === 'processing');
+  const globalProcessingStatus = processingJobs.find(job => job.status === 'processing')?.message || '';
 
   // Exact same floating and zoom functionality as cropper
   const [floatingPages, setFloatingPages] = useState<{[key: string]: {visible: boolean, position: {x: number, y: number}, size: {width: number, height: number}}}>({});
@@ -96,6 +115,41 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       setZoomedPages(new Set());
       setRearrangeMode(false);
     }
+  };
+
+  const addProcessingJob = (sessionId: string, sessionName: string, type: 'pdf' | 'presentation' | 'upload', total: number): string => {
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newJob: ProcessingJob = {
+      id: jobId,
+      sessionId,
+      sessionName,
+      type,
+      status: 'processing',
+      progress: 0,
+      total,
+      message: `Starting ${type} processing...`,
+      timestamp: Date.now()
+    };
+    setProcessingJobs(prev => [...prev, newJob]);
+    setGlobalProcessingCount(prev => prev + 1);
+    return jobId;
+  };
+
+  const updateProcessingJob = (jobId: string, updates: Partial<ProcessingJob>) => {
+    setProcessingJobs(prev => prev.map(job => 
+      job.id === jobId ? { ...job, ...updates } : job
+    ));
+  };
+
+  const completeProcessingJob = (jobId: string, status: 'completed' | 'error', message: string) => {
+    setProcessingJobs(prev => prev.map(job => 
+      job.id === jobId ? { ...job, status, message } : job
+    ));
+    setGlobalProcessingCount(prev => Math.max(0, prev - 1));
+    // Auto-remove completed/error jobs after 5 seconds
+    setTimeout(() => {
+      setProcessingJobs(prev => prev.filter(job => job.id !== jobId));
+    }, 5000);
   };
 
   const addNewSession = () => {
@@ -204,8 +258,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    setIsProcessing(true);
-    setProcessingStatus(`Processing ${files.length} files...`);
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'upload', files.length);
 
     try {
       const newPages: PDFPage[] = [];
@@ -213,7 +266,10 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.type.startsWith('image/')) {
-          setProcessingStatus(`Processing ${file.name} (${i + 1}/${files.length})`);
+          updateProcessingJob(jobId, {
+            progress: i,
+            message: `Processing ${file.name} (${i + 1}/${files.length})`
+          });
           const page = await imageToPage(file, pages.length + newPages.length);
           if (page) {
             newPages.push(page);
@@ -222,14 +278,11 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       }
 
       setPages(prev => [...prev, ...newPages]);
-      setProcessingStatus(`Successfully processed ${newPages.length} images`);
-      setTimeout(() => setProcessingStatus(''), 2000);
+      completeProcessingJob(jobId, 'completed', `Successfully processed ${newPages.length} images`);
     } catch (error) {
       console.error('Error uploading images:', error);
-      setProcessingStatus('Error processing files');
-      setTimeout(() => setProcessingStatus(''), 3000);
+      completeProcessingJob(jobId, 'error', 'Error processing files');
     } finally {
-      setIsProcessing(false);
       if (event.target) event.target.value = '';
     }
   };
@@ -239,13 +292,13 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    setIsProcessing(true);
-    setProcessingStatus('Processing PDF...');
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'upload', 1);
 
     try {
       for (const file of files) {
         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
           try {
+            updateProcessingJob(jobId, { message: `Loading PDF: ${file.name}` });
             const arrayBuffer = await file.arrayBuffer();
 
             // Configure PDF.js to use local worker
@@ -259,8 +312,16 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             const pdf = await loadingTask.promise;
             const newPages: PDFPage[] = [];
 
+            updateProcessingJob(jobId, { 
+              total: pdf.numPages,
+              message: `Extracting ${pdf.numPages} pages...`
+            });
+
             for (let i = 1; i <= pdf.numPages; i++) {
-              setProcessingStatus(`Extracting page ${i}/${pdf.numPages}`);
+              updateProcessingJob(jobId, {
+                progress: i - 1,
+                message: `Extracting page ${i}/${pdf.numPages}`
+              });
 
               try {
                 const page = await pdf.getPage(i);
@@ -300,30 +361,28 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 newPages.push(pdfPage);
               } catch (pageError) {
                 console.error(`Error processing page ${i}:`, pageError);
-                setProcessingStatus(`Error processing page ${i}, continuing...`);
+                updateProcessingJob(jobId, {
+                  message: `Error processing page ${i}, continuing...`
+                });
               }
             }
 
             if (newPages.length > 0) {
               setPages(prev => [...prev, ...newPages]);
-              setProcessingStatus(`Successfully extracted ${newPages.length} pages from ${file.name}`);
+              completeProcessingJob(jobId, 'completed', `Successfully extracted ${newPages.length} pages from ${file.name}`);
             } else {
-              setProcessingStatus(`No pages could be extracted from ${file.name}`);
+              completeProcessingJob(jobId, 'error', `No pages could be extracted from ${file.name}`);
             }
           } catch (pdfError) {
             console.error('Error processing PDF:', pdfError);
-            setProcessingStatus(`Error processing ${file.name}: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
+            completeProcessingJob(jobId, 'error', `Error processing ${file.name}: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
           }
         }
       }
-
-      setTimeout(() => setProcessingStatus(''), 3000);
     } catch (error) {
       console.error('Error in PDF upload:', error);
-      setProcessingStatus('Error processing PDF files');
-      setTimeout(() => setProcessingStatus(''), 3000);
+      completeProcessingJob(jobId, 'error', 'Error processing PDF files');
     } finally {
-      setIsProcessing(false);
       if (event.target) event.target.value = '';
     }
   };
@@ -445,13 +504,19 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       return;
     }
 
-    setIsProcessing(true);
-    setProcessingStatus('Creating PDF...');
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
 
     try {
       const pdfDoc = await PDFDocument.create();
+      const sortedPages = pages.sort((a, b) => a.order - b.order);
 
-      for (const page of pages.sort((a, b) => a.order - b.order)) {
+      for (let i = 0; i < sortedPages.length; i++) {
+        const page = sortedPages[i];
+        updateProcessingJob(jobId, {
+          progress: i,
+          message: `Processing page ${i + 1}/${sortedPages.length}`
+        });
+
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
 
@@ -484,6 +549,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         });
       }
 
+      updateProcessingJob(jobId, { message: 'Finalizing PDF...' });
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -494,14 +560,10 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       link.click();
 
       URL.revokeObjectURL(url);
-      setProcessingStatus('PDF exported successfully!');
-      setTimeout(() => setProcessingStatus(''), 2000);
+      completeProcessingJob(jobId, 'completed', 'PDF exported successfully!');
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      setProcessingStatus('Error exporting PDF');
-      setTimeout(() => setProcessingStatus(''), 3000);
-    } finally {
-      setIsProcessing(false);
+      completeProcessingJob(jobId, 'error', 'Error exporting PDF');
     }
   };
 
@@ -635,16 +697,16 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={isProcessing}
+            disabled={isCurrentSessionProcessing}
             style={{
               background: 'linear-gradient(45deg, #4CAF50, #45a049)',
               border: 'none',
               borderRadius: '8px',
               padding: '10px 16px',
               color: 'white',
-              cursor: isProcessing ? 'not-allowed' : 'pointer',
+              cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
               fontWeight: 'bold',
-              opacity: isProcessing ? 0.7 : 1
+              opacity: isCurrentSessionProcessing ? 0.7 : 1
             }}
           >
             📁 Upload Images
@@ -652,16 +714,16 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
           <button
             onClick={() => pdfInputRef.current?.click()}
-            disabled={isProcessing}
+            disabled={isCurrentSessionProcessing}
             style={{
               background: 'linear-gradient(45deg, #FF9800, #F57C00)',
               border: 'none',
               borderRadius: '8px',
               padding: '10px 16px',
               color: 'white',
-              cursor: isProcessing ? 'not-allowed' : 'pointer',
+              cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
               fontWeight: 'bold',
-              opacity: isProcessing ? 0.7 : 1
+              opacity: isCurrentSessionProcessing ? 0.7 : 1
             }}
           >
             📄 Upload PDF
@@ -1050,17 +1112,17 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               </button>
               <button
                 onClick={exportToPDF}
-                disabled={isProcessing}
+                disabled={isCurrentSessionProcessing}
                 style={{
                   background: 'linear-gradient(45deg, #2196F3, #1976D2)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 16px',
                   color: 'white',
-                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
                   fontWeight: 'bold',
                   fontSize: '12px',
-                  opacity: isProcessing ? 0.7 : 1
+                  opacity: isCurrentSessionProcessing ? 0.7 : 1
                 }}
               >
                 💾 Export PDF
@@ -1072,10 +1134,11 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     return;
                   }
 
-                  setIsProcessing(true);
-                  setProcessingStatus('Creating presentation...');
+                  const jobId = addProcessingJob(activeSessionId, activeSession.name, 'presentation', pages.length);
 
                   try {
+                    updateProcessingJob(jobId, { message: 'Creating presentation...' });
+
                     // Create HTML presentation
                     const presentationHTML = `
                     <!DOCTYPE html>
@@ -1141,6 +1204,8 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     </body>
                     </html>`;
 
+                    updateProcessingJob(jobId, { message: 'Generating download...' });
+
                     const blob = new Blob([presentationHTML], { type: 'text/html' });
                     const url = URL.createObjectURL(blob);
 
@@ -1150,27 +1215,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     link.click();
 
                     URL.revokeObjectURL(url);
-                    setProcessingStatus('Presentation created successfully!');
-                    setTimeout(() => setProcessingStatus(''), 2000);
+                    completeProcessingJob(jobId, 'completed', 'Presentation created successfully!');
                   } catch (error) {
                     console.error('Error creating presentation:', error);
-                    setProcessingStatus('Error creating presentation');
-                    setTimeout(() => setProcessingStatus(''), 3000);
-                  } finally {
-                    setIsProcessing(false);
+                    completeProcessingJob(jobId, 'error', 'Error creating presentation');
                   }
                 }}
-                disabled={isProcessing}
+                disabled={isCurrentSessionProcessing}
                 style={{
                   background: 'linear-gradient(45deg, #FF9800, #F57C00)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 16px',
                   color: 'white',
-                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
                   fontWeight: 'bold',
                   fontSize: '12px',
-                  opacity: isProcessing ? 0.7 : 1
+                  opacity: isCurrentSessionProcessing ? 0.7 : 1
                 }}
               >
                 🎥 Create Presentation
@@ -1226,17 +1287,76 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         </div>
       </div>
 
-      {/* Status Bar */}
-      {(isProcessing || processingStatus) && (
+      {/* Global Processing Status Bar */}
+      {(globalProcessingCount > 0 || processingJobs.length > 0) && (
         <div style={{
-          background: 'rgba(0,0,0,0.8)',
+          background: 'rgba(0,0,0,0.9)',
           color: 'white',
           padding: '12px 24px',
-          textAlign: 'center',
-          fontSize: '14px'
+          fontSize: '14px',
+          borderBottom: '1px solid rgba(0, 255, 255, 0.2)',
+          maxHeight: '150px',
+          overflowY: 'auto'
         }}>
-          {isProcessing && '⏳ '}
-          {processingStatus || 'Processing...'}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: processingJobs.length > 0 ? '8px' : '0'
+          }}>
+            <span style={{ fontWeight: 'bold' }}>
+              🔄 Processing Jobs ({globalProcessingCount} active)
+            </span>
+            {globalProcessingStatus && (
+              <span style={{ color: '#00bfff', fontSize: '12px' }}>
+                {globalProcessingStatus}
+              </span>
+            )}
+          </div>
+          
+          {/* Jobs List */}
+          {processingJobs.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {processingJobs.slice(0, 5).map(job => (
+                <div key={job.id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(255,255,255,0.1)',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontSize: '12px'
+                }}>
+                  <span>
+                    <span style={{ color: job.sessionId === activeSessionId ? '#4CAF50' : '#00bfff' }}>
+                      {job.sessionName}
+                    </span>
+                    {' - '}
+                    <span style={{ textTransform: 'capitalize' }}>{job.type}</span>
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {job.status === 'processing' && (
+                      <span style={{ color: '#FFC107' }}>
+                        {job.progress}/{job.total}
+                      </span>
+                    )}
+                    <span style={{
+                      color: job.status === 'completed' ? '#4CAF50' : 
+                             job.status === 'error' ? '#f44336' : '#FFC107'
+                    }}>
+                      {job.status === 'processing' ? '⏳' : 
+                       job.status === 'completed' ? '✅' : '❌'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {processingJobs.length > 5 && (
+                <div style={{ fontSize: '11px', color: '#888', textAlign: 'center' }}>
+                  ... and {processingJobs.length - 5} more jobs
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
