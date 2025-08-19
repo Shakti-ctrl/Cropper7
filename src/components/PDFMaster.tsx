@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../PDF-Toolkit/src/components/ui/accordion';
-import { RadioGroup, RadioGroupItem } from '../PDF-Toolkit/src/components/ui/radio-group';
-import { Label } from '../PDF-Toolkit/src/components/ui/label';
-import { Button } from '../PDF-Toolkit/src/components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { Label } from './ui/label';
+import { Button } from './ui/button';
 import { Loader2, MoveLeft, MoveRight, Merge, SendToBack, Scaling, BookType, Image, FileArchive } from 'lucide-react';
 
 // Set up PDF.js worker - use local worker to avoid CDN issues
@@ -84,6 +84,7 @@ const renderPdfPage = async (file: File, canvasRef: React.RefObject<HTMLCanvasEl
     const renderContext = {
       canvasContext: context,
       viewport: viewport,
+      canvas: canvas,
     };
 
     await page.render(renderContext).promise;
