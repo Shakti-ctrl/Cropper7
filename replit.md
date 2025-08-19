@@ -24,6 +24,12 @@ Preferred communication style: Simple, everyday language.
 - **Virtual Keyboard**: Comprehensive floating keyboard with full PC functionality, draggable and resizable
 - **Complete Separation**: PDF Master runs independently without affecting existing cropper functionality
 
+### Enhanced PDF Master Features (August 19, 2025)
+- **Replicated Share Button**: Implemented exact Quality Panel share functionality - now shares actual PDF files without auto-download using Web Share API with file support
+- **Folder Upload Button**: Added folder upload button (📂 Upload Folder) to PDF Master welcome screen, matching the cropper welcome page functionality
+- **Share Consistency**: PDF Master share button now matches Quality Panel exactly with same text, functionality, and subtitle "📋 Share without downloading to device"
+- **Improved UX**: Enhanced welcome screen layout with three buttons (Images, Folder, PDF) for complete upload options
+
 ## Recent Changes (August 2025)
 
 ### PDF Generation and Image Processing Fixes (Latest)

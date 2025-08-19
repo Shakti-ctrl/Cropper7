@@ -84,6 +84,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [rearrangeInput, setRearrangeInput] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const floatingRefs = useRef<{[key: string]: HTMLDivElement}>({});
 
@@ -1238,39 +1239,84 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               </button>
               <button
                 onClick={async () => {
-                  if (pages.length === 0) {
-                    alert('No pages to share');
-                    return;
-                  }
-
-                  if (navigator.share) {
-                    try {
-                      await navigator.share({
-                        title: `${activeSession.name} - PDF Master`,
-                        text: `Check out my PDF presentation with ${pages.length} pages created using PDF Master!`,
-                        url: window.location.href
-                      });
-                    } catch (error) {
-                      console.log('Share cancelled or failed:', error);
+                  try {
+                    if (pages.length === 0) {
+                      alert('🚨 Please add some pages first before sharing!');
+                      return;
                     }
-                  } else {
-                    const shareText = `Check out my PDF presentation "${activeSession.name}" with ${pages.length} pages created using PDF Master! ${window.location.href}`;
 
-                    if (navigator.clipboard) {
+                    // Create PDF exactly like Quality Panel
+                    const { jsPDF } = await import('jspdf');
+                    const pdf = new jsPDF();
+                    let isFirstPage = true;
+
+                    const sortedPages = pages.sort((a, b) => a.order - b.order);
+
+                    for (let i = 0; i < sortedPages.length; i++) {
+                      const page = sortedPages[i];
+                      
+                      if (!isFirstPage) {
+                        pdf.addPage();
+                      }
+                      isFirstPage = false;
+
+                      const pageWidth = pdf.internal.pageSize.getWidth();
+                      const pageHeight = pdf.internal.pageSize.getHeight();
+
+                      // Calculate image dimensions to fit page
+                      const imgAspectRatio = page.width / page.height;
+                      const pageAspectRatio = pageWidth / pageHeight;
+
+                      let imgWidth, imgHeight;
+                      if (imgAspectRatio > pageAspectRatio) {
+                        imgWidth = pageWidth - 20;
+                        imgHeight = imgWidth / imgAspectRatio;
+                      } else {
+                        imgHeight = pageHeight - 20;
+                        imgWidth = imgHeight * imgAspectRatio;
+                      }
+
+                      const x = (pageWidth - imgWidth) / 2;
+                      const y = (pageHeight - imgHeight) / 2;
+
                       try {
-                        await navigator.clipboard.writeText(shareText);
-                        alert('Share text copied to clipboard!');
-                      } catch (error) {
-                        console.error('Failed to copy to clipboard:', error);
-                        prompt('Copy this text to share:', shareText);
+                        pdf.addImage(page.imageData, 'PNG', x, y, imgWidth, imgHeight, undefined, 'FAST');
+                      } catch (imageError) {
+                        console.warn(`Failed to add page ${i} to PDF:`, imageError);
+                        continue;
+                      }
+                    }
+
+                    const sessionName = activeSession.name.replace(/[^a-zA-Z0-9-_]/g, '_');
+                    const filename = `${sessionName}_enhanced_${new Date().toISOString().slice(0, 10)}.pdf`;
+                    const pdfBlob = pdf.output('blob');
+
+                    // Use exact same sharing logic as Quality Panel
+                    if (navigator.share && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
+                      try {
+                        await navigator.share({
+                          title: '🎨 Enhanced PDF Pages',
+                          text: 'Check out these digitally enhanced PDF pages!',
+                          files: [new File([pdfBlob], filename, { type: 'application/pdf' })]
+                        });
+                        alert('📄 PDF shared successfully!');
+                      } catch (shareError: any) {
+                        if (shareError.name !== 'AbortError') {
+                          console.log('Share failed:', shareError);
+                          alert(`📄 PDF generated successfully! You can share this PDF of ${sortedPages.length} enhanced pages.`);
+                        }
                       }
                     } else {
-                      prompt('Copy this text to share:', shareText);
+                      // Just show message - no auto download, exactly like Quality Panel
+                      alert(`📄 PDF generated successfully! You can share this PDF of ${sortedPages.length} enhanced pages.`);
                     }
+                  } catch (error) {
+                    console.error('Error sharing PDF:', error);
+                    alert('❌ Error creating PDF. Please try again or check your pages.');
                   }
                 }}
                 style={{
-                  background: 'linear-gradient(45deg, #007bff, #0056b3)',
+                  background: '#007bff',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 16px',
@@ -1282,6 +1328,9 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 📲 Share Enhanced PDF
               </button>
+              <div style={{ marginTop: '5px', textAlign: 'center' }}>
+                <small style={{ color: '#666', fontSize: '11px' }}>📋 Share without downloading to device</small>
+              </div>
             </>
           )}
         </div>
@@ -1382,7 +1431,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               Upload images to create a PDF document or upload an existing PDF to edit its pages. 
               You can rotate, crop, reorder, and manipulate pages with full control.
             </p>
-            <div style={{ display: 'flex', gap: '16px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 style={{
@@ -1398,6 +1447,22 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 }}
               >
                 📁 Upload Images
+              </button>
+              <button
+                onClick={() => folderInputRef.current?.click()}
+                style={{
+                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '16px 32px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+                }}
+              >
+                📂 Upload Folder
               </button>
               <button
                 onClick={() => pdfInputRef.current?.click()}
@@ -1796,6 +1861,15 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         type="file"
         multiple
         accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleImageUpload}
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        accept="image/*"
+        {...({ webkitdirectory: "" } as any)}
         style={{ display: 'none' }}
         onChange={handleImageUpload}
       />
