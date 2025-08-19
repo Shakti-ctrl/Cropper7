@@ -26,7 +26,7 @@ interface PDFPage {
 interface PDFSession {
   id: string;
   name: string;
-  pageCount: number;
+  pages: PDFPage[];
   createdAt: number;
   modifiedAt: number;
 }
@@ -37,8 +37,21 @@ interface PDFMasterProps {
 }
 
 export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
-  const [sessionName, setSessionName] = useState('PDF Project');
-  const [pages, setPages] = useState<PDFPage[]>([]);
+  // Tab-based session management - exactly like cropper
+  const [sessions, setSessions] = useState<PDFSession[]>([{
+    id: 'pdf-session-1',
+    name: 'PDF Session 1',
+    pages: [],
+    createdAt: Date.now(),
+    modifiedAt: Date.now()
+  }]);
+  const [activeSessionId, setActiveSessionId] = useState('pdf-session-1');
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingTabName, setEditingTabName] = useState('');
+
+  // Current session data
+  const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
+  const [pages, setPages] = useState<PDFPage[]>(activeSession.pages);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
@@ -47,12 +60,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [floatingPages, setFloatingPages] = useState<{[key: string]: {visible: boolean, position: {x: number, y: number}, size: {width: number, height: number}}}>({});
   const [zoomedPages, setZoomedPages] = useState<Set<string>>(new Set());
   const [rearrangeMode, setRearrangeMode] = useState(false);
-
-  // Session management - exact same as cropper
-  const [sessions, setSessions] = useState<PDFSession[]>([]);
-  const [showSessionManager, setShowSessionManager] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string>('');
-  const [isEditingSessionName, setIsEditingSessionName] = useState(false);
 
   // Rearrange options - exact same as cropper
   const [showRearrangeOptions, setShowRearrangeOptions] = useState(false);
@@ -63,120 +70,89 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const floatingRefs = useRef<{[key: string]: HTMLDivElement}>({});
 
   // Session management functions - exact same as cropper
-  const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const generateSessionId = () => `pdf_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const saveCurrentSession = useCallback(() => {
-    if (pages.length === 0) return;
+    if (!activeSession) return;
     
     try {
-      const sessionData: PDFSession = {
-        id: currentSessionId || generateSessionId(),
-        name: sessionName,
-        pageCount: pages.length,
-        createdAt: currentSessionId ? sessions.find(s => s.id === currentSessionId)?.createdAt || Date.now() : Date.now(),
-        modifiedAt: Date.now()
-      };
-
-      // Update sessions list
-      setSessions(prev => {
-        const existing = prev.find(s => s.id === sessionData.id);
-        if (existing) {
-          return prev.map(s => s.id === sessionData.id ? sessionData : s);
-        } else {
-          return [sessionData, ...prev];
-        }
-      });
-
-      // Save to localStorage with size management
-      try {
-        const sessionsToSave = sessions.filter(s => s.id !== sessionData.id);
-        sessionsToSave.unshift(sessionData);
-        
-        // Keep only last 10 sessions to prevent quota issues
-        const limitedSessions = sessionsToSave.slice(0, 10);
-        localStorage.setItem('pdfMasterSessions', JSON.stringify(limitedSessions));
-      } catch (storageError) {
-        console.warn('Storage full, clearing old sessions');
-        localStorage.removeItem('pdfMasterSessions');
-        localStorage.setItem('pdfMasterSessions', JSON.stringify([sessionData]));
-      }
-
-      if (!currentSessionId) {
-        setCurrentSessionId(sessionData.id);
-      }
+      setSessions(prev => prev.map(session => 
+        session.id === activeSessionId 
+          ? { ...session, pages, modifiedAt: Date.now() }
+          : session
+      ));
     } catch (error) {
       console.error('Error saving session:', error);
     }
-  }, [sessionName, pages, currentSessionId, sessions]);
+  }, [activeSessionId, pages, activeSession]);
 
-  const loadSessions = useCallback(() => {
-    try {
-      const saved = localStorage.getItem('pdfMasterSessions');
-      if (saved) {
-        const parsedSessions = JSON.parse(saved);
-        setSessions(parsedSessions);
-      }
-    } catch (error) {
-      console.warn('Could not load sessions');
-      setSessions([]);
-    }
-  }, []);
-
-  const createNewSession = () => {
-    const newSessionId = generateSessionId();
-    setCurrentSessionId(newSessionId);
-    setSessionName('New PDF Project');
-    setPages([]);
-    setSelectedPages(new Set());
-    setFloatingPages({});
-    setZoomedPages(new Set());
-    setRearrangeMode(false);
-    setShowSessionManager(false);
-  };
-
-  const deleteSession = (sessionId: string) => {
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
-    const updatedSessions = sessions.filter(s => s.id !== sessionId);
-    localStorage.setItem('pdfMasterSessions', JSON.stringify(updatedSessions));
-    
-    if (currentSessionId === sessionId) {
-      createNewSession();
-    }
-  };
-
-  const duplicateSession = (sessionId: string) => {
+  const switchToSession = (sessionId: string) => {
+    saveCurrentSession();
     const session = sessions.find(s => s.id === sessionId);
     if (session) {
-      const newSessionId = generateSessionId();
-      const duplicatedSession: PDFSession = {
-        ...session,
-        id: newSessionId,
-        name: `${session.name} (Copy)`,
-        createdAt: Date.now(),
-        modifiedAt: Date.now()
-      };
-      
-      setSessions(prev => [duplicatedSession, ...prev]);
-      const updatedSessions = [duplicatedSession, ...sessions];
-      localStorage.setItem('pdfMasterSessions', JSON.stringify(updatedSessions.slice(0, 10)));
+      setActiveSessionId(sessionId);
+      setPages(session.pages);
+      setSelectedPages(new Set());
+      setFloatingPages({});
+      setZoomedPages(new Set());
+      setRearrangeMode(false);
     }
   };
 
-  useEffect(() => {
-    if (isVisible) {
-      loadSessions();
-      if (!currentSessionId) {
-        const newId = generateSessionId();
-        setCurrentSessionId(newId);
+  const addNewSession = () => {
+    const newSessionId = generateSessionId();
+    const newSession: PDFSession = {
+      id: newSessionId,
+      name: `PDF Session ${sessions.length + 1}`,
+      pages: [],
+      createdAt: Date.now(),
+      modifiedAt: Date.now()
+    };
+
+    setSessions(prev => [...prev, newSession]);
+    switchToSession(newSessionId);
+  };
+
+  const closeSession = (sessionId: string) => {
+    if (sessions.length === 1) return; // Don't close last session
+
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    
+    if (sessionId === activeSessionId) {
+      const remainingSessions = sessions.filter(s => s.id !== sessionId);
+      if (remainingSessions.length > 0) {
+        switchToSession(remainingSessions[0].id);
       }
     }
-  }, [isVisible, loadSessions, currentSessionId]);
+  };
+
+  const startEditingTab = (sessionId: string, currentName: string) => {
+    setEditingTabId(sessionId);
+    setEditingTabName(currentName);
+  };
+
+  const finishEditingTab = () => {
+    if (editingTabId && editingTabName.trim()) {
+      setSessions(prev => prev.map(session =>
+        session.id === editingTabId
+          ? { ...session, name: editingTabName.trim() }
+          : session
+      ));
+    }
+    setEditingTabId(null);
+    setEditingTabName('');
+  };
+
+  const cancelEditingTab = () => {
+    setEditingTabId(null);
+    setEditingTabName('');
+  };
 
   useEffect(() => {
     if (pages.length > 0) {
       saveCurrentSession();
     }
-  }, [pages, sessionName, saveCurrentSession]);
+  }, [pages, saveCurrentSession]);
 
   // Convert image file to PDFPage - same as cropper logic
   const imageToPage = async (file: File, order: number): Promise<PDFPage | null> => {
@@ -259,7 +235,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  // Handle PDF upload with better error handling
+  // Fixed PDF upload with proper error handling
   const handlePDFUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
@@ -269,55 +245,82 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     
     try {
       for (const file of files) {
-        if (file.type === 'application/pdf') {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-          
-          const newPages: PDFPage[] = [];
-          
-          for (let i = 1; i <= pdf.numPages; i++) {
-            setProcessingStatus(`Extracting page ${i}/${pdf.numPages}`);
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          try {
+            const arrayBuffer = await file.arrayBuffer();
             
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 1.5 });
+            // Configure PDF.js to use local worker
+            const loadingTask = pdfjs.getDocument({
+              data: arrayBuffer,
+              useWorkerFetch: false,
+              isEvalSupported: false,
+              useSystemFonts: true
+            });
             
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d')!;
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
+            const pdf = await loadingTask.promise;
+            const newPages: PDFPage[] = [];
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+              setProcessingStatus(`Extracting page ${i}/${pdf.numPages}`);
+              
+              try {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 1.5 });
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                if (!context) {
+                  console.error('Could not get canvas context');
+                  continue;
+                }
+                
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
 
-            // Fix the TypeScript error by providing canvas in render parameters
-            await page.render({ 
-              canvasContext: context, 
-              viewport,
-              canvas 
-            }).promise;
+                const renderContext = {
+                  canvasContext: context,
+                  viewport: viewport
+                };
+
+                await page.render(renderContext).promise;
+                
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                
+                const pdfPage: PDFPage = {
+                  id: `pdf_page_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
+                  name: `${file.name.replace('.pdf', '')}_page_${i}`,
+                  imageData,
+                  rotation: 0,
+                  crop: { x: 0, y: 0, width: viewport.width, height: viewport.height },
+                  order: pages.length + newPages.length,
+                  width: viewport.width,
+                  height: viewport.height
+                };
+                
+                newPages.push(pdfPage);
+              } catch (pageError) {
+                console.error(`Error processing page ${i}:`, pageError);
+                setProcessingStatus(`Error processing page ${i}, continuing...`);
+              }
+            }
             
-            const imageData = canvas.toDataURL('image/jpeg', 0.8);
-            
-            const pdfPage: PDFPage = {
-              id: `pdf_page_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
-              name: `${file.name.replace('.pdf', '')}_page_${i}`,
-              imageData,
-              rotation: 0,
-              crop: { x: 0, y: 0, width: viewport.width, height: viewport.height },
-              order: pages.length + newPages.length,
-              width: viewport.width,
-              height: viewport.height
-            };
-            
-            newPages.push(pdfPage);
+            if (newPages.length > 0) {
+              setPages(prev => [...prev, ...newPages]);
+              setProcessingStatus(`Successfully extracted ${newPages.length} pages from ${file.name}`);
+            } else {
+              setProcessingStatus(`No pages could be extracted from ${file.name}`);
+            }
+          } catch (pdfError) {
+            console.error('Error processing PDF:', pdfError);
+            setProcessingStatus(`Error processing ${file.name}: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
           }
-          
-          setPages(prev => [...prev, ...newPages]);
-          setProcessingStatus(`Successfully extracted ${newPages.length} pages`);
         }
       }
       
-      setTimeout(() => setProcessingStatus(''), 2000);
+      setTimeout(() => setProcessingStatus(''), 3000);
     } catch (error) {
-      console.error('Error processing PDF:', error);
-      setProcessingStatus('Error processing PDF file');
+      console.error('Error in PDF upload:', error);
+      setProcessingStatus('Error processing PDF files');
       setTimeout(() => setProcessingStatus(''), 3000);
     } finally {
       setIsProcessing(false);
@@ -347,6 +350,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     });
   };
 
+  // Enhanced directional movement - up, down, left, right
   const movePageUp = (index: number) => {
     if (index > 0) {
       setPages(prev => {
@@ -364,6 +368,20 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         [newPages[index], newPages[index + 1]] = [newPages[index + 1], newPages[index]];
         return newPages.map((page, i) => ({ ...page, order: i }));
       });
+    }
+  };
+
+  const movePageLeft = (index: number) => {
+    // Move to beginning of row or previous position
+    if (index > 0) {
+      movePageUp(index);
+    }
+  };
+
+  const movePageRight = (index: number) => {
+    // Move to end of row or next position
+    if (index < pages.length - 1) {
+      movePageDown(index);
     }
   };
 
@@ -472,7 +490,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${sessionName.replace(/\s+/g, '_')}.pdf`;
+      link.download = `${activeSession.name.replace(/\s+/g, '_')}.pdf`;
       link.click();
       
       URL.revokeObjectURL(url);
@@ -612,55 +630,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           <h1 style={{ color: '#00bfff', margin: 0, fontSize: '24px', fontWeight: 'bold' }}>
             📄 PDF Master
           </h1>
-          {isEditingSessionName ? (
-            <input
-              type="text"
-              value={sessionName}
-              onChange={(e) => setSessionName(e.target.value)}
-              onBlur={() => setIsEditingSessionName(false)}
-              onKeyPress={(e) => e.key === 'Enter' && setIsEditingSessionName(false)}
-              autoFocus
-              style={{
-                background: 'rgba(0, 255, 255, 0.1)',
-                border: '1px solid rgba(0, 255, 255, 0.3)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                color: '#00bfff',
-                fontSize: '14px',
-                minWidth: '200px'
-              }}
-            />
-          ) : (
-            <div
-              onClick={() => setIsEditingSessionName(true)}
-              style={{
-                background: 'rgba(0, 255, 255, 0.1)',
-                border: '1px solid rgba(0, 255, 255, 0.3)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                color: '#00bfff',
-                fontSize: '14px',
-                minWidth: '200px',
-                cursor: 'pointer'
-              }}
-            >
-              {sessionName}
-            </div>
-          )}
-          <button
-            onClick={() => setShowSessionManager(!showSessionManager)}
-            style={{
-              background: 'rgba(0, 255, 255, 0.2)',
-              border: '1px solid rgba(0, 255, 255, 0.3)',
-              borderRadius: '8px',
-              padding: '8px 12px',
-              color: '#00bfff',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            📋 Sessions ({sessions.length})
-          </button>
         </div>
         
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -715,111 +684,125 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         </div>
       </div>
 
-      {/* Session Manager - exact same as cropper */}
-      {showSessionManager && (
-        <div style={{
-          background: 'rgba(0, 20, 40, 0.95)',
-          borderBottom: '1px solid rgba(0, 255, 255, 0.2)',
-          padding: '16px 24px',
-          maxHeight: '200px',
-          overflowY: 'auto'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ color: '#00bfff', margin: 0 }}>Session Manager</h3>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={createNewSession}
-                style={{
-                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                ➕ New Session
-              </button>
-              <button
-                onClick={() => setShowSessionManager(false)}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                ✕ Close
-              </button>
-            </div>
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {sessions.map(session => (
-              <div
-                key={session.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  background: session.id === currentSessionId ? 'rgba(0, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                  border: session.id === currentSessionId ? '1px solid #00bfff' : '1px solid rgba(255, 255, 255, 0.2)',
-                  borderRadius: '6px',
-                  padding: '8px 12px'
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: '#00bfff', fontWeight: 'bold', fontSize: '14px' }}>
-                    {session.name}
-                  </div>
-                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px' }}>
-                    {session.pageCount} pages • Modified: {new Date(session.modifiedAt).toLocaleDateString()}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '4px' }}>
+      {/* Tab System - EXACTLY like cropper */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))',
+        borderBottom: '1px solid rgba(0, 255, 255, 0.2)',
+        padding: '8px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        overflowX: 'auto'
+      }}>
+        {sessions.map(session => (
+          <div
+            key={session.id}
+            style={{
+              padding: '8px 10px',
+              background: session.id === activeSessionId ? '#444' : '#222',
+              color: 'white',
+              borderRadius: '3px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {editingTabId === session.id ? (
+              <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={editingTabName}
+                  onChange={(e) => setEditingTabName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') finishEditingTab();
+                    if (e.key === 'Escape') cancelEditingTab();
+                  }}
+                  onBlur={finishEditingTab}
+                  autoFocus
+                  style={{
+                    background: '#555',
+                    border: '1px solid #777',
+                    color: 'white',
+                    padding: '2px 5px',
+                    fontSize: '12px',
+                    width: '120px'
+                  }}
+                />
+                <button
+                  onClick={finishEditingTab}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#4CAF50',
+                    fontSize: '10px'
+                  }}
+                >
+                  ✓
+                </button>
+                <button
+                  onClick={cancelEditingTab}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#f44336',
+                    fontSize: '10px'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <>
+                <span
+                  onClick={() => switchToSession(session.id)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {session.name}
+                </span>
+                <button
+                  onClick={() => startEditingTab(session.id, session.name)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#888',
+                    cursor: 'pointer',
+                    fontSize: '10px'
+                  }}
+                  title="Edit tab name"
+                >
+                  ✏️
+                </button>
+                {sessions.length > 1 && (
                   <button
-                    onClick={() => duplicateSession(session.id)}
+                    onClick={() => closeSession(session.id)}
                     style={{
-                      background: 'rgba(33, 150, 243, 0.8)',
+                      background: 'none',
                       border: 'none',
-                      borderRadius: '4px',
-                      padding: '4px 8px',
-                      color: 'white',
+                      color: '#888',
                       cursor: 'pointer',
-                      fontSize: '10px'
+                      fontSize: '12px'
                     }}
                   >
-                    📋 Copy
+                    ✕
                   </button>
-                  <button
-                    onClick={() => deleteSession(session.id)}
-                    style={{
-                      background: 'rgba(244, 67, 54, 0.8)',
-                      border: 'none',
-                      borderRadius: '4px',
-                      padding: '4px 8px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '10px'
-                    }}
-                  >
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-            {sessions.length === 0 && (
-              <div style={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', padding: '20px' }}>
-                No sessions saved yet
-              </div>
+                )}
+              </>
             )}
           </div>
-        </div>
-      )}
+        ))}
+        <button
+          onClick={addNewSession}
+          style={{
+            background: '#333',
+            border: '1px solid #555',
+            color: '#4CAF50',
+            borderRadius: '3px',
+            padding: '6px 8px',
+            cursor: 'pointer',
+            fontSize: '12px'
+          }}
+        >
+          + Add
+        </button>
+      </div>
 
       {/* Rearrange Options Modal - exact same as cropper */}
       {showRearrangeOptions && (
@@ -1275,18 +1258,21 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     }}
                   />
                   
-                  {/* Rearrange buttons - EXACT same as cropper */}
+                  {/* ALL DIRECTIONAL Rearrange buttons - up, down, left, right */}
                   {rearrangeMode && (
                     <div style={{
                       position: 'absolute',
                       top: '50%',
-                      right: '10px',
-                      transform: 'translateY(-50%)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '5px',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gridTemplateRows: 'repeat(3, 1fr)',
+                      gap: '8px',
                       zIndex: 300
                     }}>
+                      {/* Top Row */}
+                      <div></div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1298,34 +1284,93 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           color: "white",
                           border: "none",
                           borderRadius: "50%",
-                          width: "35px",
-                          height: "35px",
+                          width: "40px",
+                          height: "40px",
                           cursor: index === 0 ? "not-allowed" : "pointer",
-                          fontSize: "16px",
+                          fontSize: "20px",
                           fontWeight: "bold",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                          transition: "all 0.2s ease",
                           opacity: index === 0 ? 0.5 : 1
-                        }}
-                        onMouseEnter={(e) => {
-                          if (index !== 0) e.currentTarget.style.transform = "scale(1.1)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "scale(1)";
-                        }}
-                        onMouseDown={(e) => {
-                          e.currentTarget.style.transform = "scale(0.95)";
-                        }}
-                        onMouseUp={(e) => {
-                          e.currentTarget.style.transform = "scale(1.1)";
                         }}
                         title="Move Up"
                       >
                         ↑
                       </button>
+                      <div></div>
+
+                      {/* Middle Row */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          movePageLeft(index);
+                        }}
+                        disabled={index === 0}
+                        style={{
+                          background: index === 0 ? "#666" : "linear-gradient(135deg, #FF9800, #F57C00)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "50%",
+                          width: "40px",
+                          height: "40px",
+                          cursor: index === 0 ? "not-allowed" : "pointer",
+                          fontSize: "20px",
+                          fontWeight: "bold",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                          opacity: index === 0 ? 0.5 : 1
+                        }}
+                        title="Move Left"
+                      >
+                        ←
+                      </button>
+                      <div style={{
+                        background: "rgba(0,0,0,0.5)",
+                        borderRadius: "50%",
+                        width: "40px",
+                        height: "40px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                        fontSize: "14px",
+                        fontWeight: "bold"
+                      }}>
+                        {index + 1}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          movePageRight(index);
+                        }}
+                        disabled={index === pages.length - 1}
+                        style={{
+                          background: index === pages.length - 1 ? "#666" : "linear-gradient(135deg, #FF9800, #F57C00)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "50%",
+                          width: "40px",
+                          height: "40px",
+                          cursor: index === pages.length - 1 ? "not-allowed" : "pointer",
+                          fontSize: "20px",
+                          fontWeight: "bold",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                          opacity: index === pages.length - 1 ? 0.5 : 1
+                        }}
+                        title="Move Right"
+                      >
+                        →
+                      </button>
+
+                      {/* Bottom Row */}
+                      <div></div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1337,34 +1382,22 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           color: "white",
                           border: "none",
                           borderRadius: "50%",
-                          width: "35px",
-                          height: "35px",
+                          width: "40px",
+                          height: "40px",
                           cursor: index === pages.length - 1 ? "not-allowed" : "pointer",
-                          fontSize: "16px",
+                          fontSize: "20px",
                           fontWeight: "bold",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                          transition: "all 0.2s ease",
                           opacity: index === pages.length - 1 ? 0.5 : 1
-                        }}
-                        onMouseEnter={(e) => {
-                          if (index !== pages.length - 1) e.currentTarget.style.transform = "scale(1.1)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "scale(1)";
-                        }}
-                        onMouseDown={(e) => {
-                          e.currentTarget.style.transform = "scale(0.95)";
-                        }}
-                        onMouseUp={(e) => {
-                          e.currentTarget.style.transform = "scale(1.1)";
                         }}
                         title="Move Down"
                       >
                         ↓
                       </button>
+                      <div></div>
                     </div>
                   )}
 
