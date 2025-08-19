@@ -23,6 +23,14 @@ interface PDFPage {
   height: number;
 }
 
+interface PDFSession {
+  id: string;
+  name: string;
+  pageCount: number;
+  createdAt: number;
+  modifiedAt: number;
+}
+
 interface PDFMasterProps {
   isVisible: boolean;
   onClose: () => void;
@@ -40,40 +48,135 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [zoomedPages, setZoomedPages] = useState<Set<string>>(new Set());
   const [rearrangeMode, setRearrangeMode] = useState(false);
 
+  // Session management - exact same as cropper
+  const [sessions, setSessions] = useState<PDFSession[]>([]);
+  const [showSessionManager, setShowSessionManager] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string>('');
+  const [isEditingSessionName, setIsEditingSessionName] = useState(false);
+
+  // Rearrange options - exact same as cropper
+  const [showRearrangeOptions, setShowRearrangeOptions] = useState(false);
+  const [rearrangeInput, setRearrangeInput] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const floatingRefs = useRef<{[key: string]: HTMLDivElement}>({});
 
-  // Simple session save without large data
-  const saveSession = useCallback(() => {
+  // Session management functions - exact same as cropper
+  const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  const saveCurrentSession = useCallback(() => {
+    if (pages.length === 0) return;
+    
     try {
-      const lightSession = {
+      const sessionData: PDFSession = {
+        id: currentSessionId || generateSessionId(),
         name: sessionName,
         pageCount: pages.length,
-        createdAt: new Date(),
-        modifiedAt: new Date()
+        createdAt: currentSessionId ? sessions.find(s => s.id === currentSessionId)?.createdAt || Date.now() : Date.now(),
+        modifiedAt: Date.now()
       };
-      localStorage.setItem('pdfMasterSession', JSON.stringify(lightSession));
+
+      // Update sessions list
+      setSessions(prev => {
+        const existing = prev.find(s => s.id === sessionData.id);
+        if (existing) {
+          return prev.map(s => s.id === sessionData.id ? sessionData : s);
+        } else {
+          return [sessionData, ...prev];
+        }
+      });
+
+      // Save to localStorage with size management
+      try {
+        const sessionsToSave = sessions.filter(s => s.id !== sessionData.id);
+        sessionsToSave.unshift(sessionData);
+        
+        // Keep only last 10 sessions to prevent quota issues
+        const limitedSessions = sessionsToSave.slice(0, 10);
+        localStorage.setItem('pdfMasterSessions', JSON.stringify(limitedSessions));
+      } catch (storageError) {
+        console.warn('Storage full, clearing old sessions');
+        localStorage.removeItem('pdfMasterSessions');
+        localStorage.setItem('pdfMasterSessions', JSON.stringify([sessionData]));
+      }
+
+      if (!currentSessionId) {
+        setCurrentSessionId(sessionData.id);
+      }
     } catch (error) {
-      console.warn('Could not save session, storage full');
-      // Clear storage and try again
-      localStorage.removeItem('pdfMasterSession');
+      console.error('Error saving session:', error);
     }
-  }, [sessionName, pages.length]);
+  }, [sessionName, pages, currentSessionId, sessions]);
+
+  const loadSessions = useCallback(() => {
+    try {
+      const saved = localStorage.getItem('pdfMasterSessions');
+      if (saved) {
+        const parsedSessions = JSON.parse(saved);
+        setSessions(parsedSessions);
+      }
+    } catch (error) {
+      console.warn('Could not load sessions');
+      setSessions([]);
+    }
+  }, []);
+
+  const createNewSession = () => {
+    const newSessionId = generateSessionId();
+    setCurrentSessionId(newSessionId);
+    setSessionName('New PDF Project');
+    setPages([]);
+    setSelectedPages(new Set());
+    setFloatingPages({});
+    setZoomedPages(new Set());
+    setRearrangeMode(false);
+    setShowSessionManager(false);
+  };
+
+  const deleteSession = (sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    const updatedSessions = sessions.filter(s => s.id !== sessionId);
+    localStorage.setItem('pdfMasterSessions', JSON.stringify(updatedSessions));
+    
+    if (currentSessionId === sessionId) {
+      createNewSession();
+    }
+  };
+
+  const duplicateSession = (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      const newSessionId = generateSessionId();
+      const duplicatedSession: PDFSession = {
+        ...session,
+        id: newSessionId,
+        name: `${session.name} (Copy)`,
+        createdAt: Date.now(),
+        modifiedAt: Date.now()
+      };
+      
+      setSessions(prev => [duplicatedSession, ...prev]);
+      const updatedSessions = [duplicatedSession, ...sessions];
+      localStorage.setItem('pdfMasterSessions', JSON.stringify(updatedSessions.slice(0, 10)));
+    }
+  };
 
   useEffect(() => {
     if (isVisible) {
-      const saved = localStorage.getItem('pdfMasterSession');
-      if (saved) {
-        try {
-          const session = JSON.parse(saved);
-          setSessionName(session.name || 'PDF Project');
-        } catch (error) {
-          console.warn('Could not load session');
-        }
+      loadSessions();
+      if (!currentSessionId) {
+        const newId = generateSessionId();
+        setCurrentSessionId(newId);
       }
     }
-  }, [isVisible]);
+  }, [isVisible, loadSessions, currentSessionId]);
+
+  useEffect(() => {
+    if (pages.length > 0) {
+      saveCurrentSession();
+    }
+  }, [pages, sessionName, saveCurrentSession]);
 
   // Convert image file to PDFPage - same as cropper logic
   const imageToPage = async (file: File, order: number): Promise<PDFPage | null> => {
@@ -183,9 +286,11 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
+            // Fix the TypeScript error by providing canvas in render parameters
             await page.render({ 
               canvasContext: context, 
-              viewport 
+              viewport,
+              canvas 
             }).promise;
             
             const imageData = canvas.toDataURL('image/jpeg', 0.8);
@@ -267,6 +372,52 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       const reversed = [...prev].reverse();
       return reversed.map((page, index) => ({ ...page, order: index }));
     });
+  };
+
+  // Advanced rearrange functionality - exact same as cropper
+  const handleRearrangeClick = () => {
+    if (!rearrangeMode) {
+      setShowRearrangeOptions(true);
+    } else {
+      setRearrangeMode(false);
+      setShowRearrangeOptions(false);
+    }
+  };
+
+  const startArrowRearrange = () => {
+    setRearrangeMode(true);
+    setShowRearrangeOptions(false);
+  };
+
+  const startInputRearrange = () => {
+    const currentOrder = pages.map((_, index) => index + 1).join(',');
+    setRearrangeInput(currentOrder);
+    setShowRearrangeOptions(false);
+  };
+
+  const applyInputRearrange = () => {
+    try {
+      const newOrder = rearrangeInput.split(',').map(num => parseInt(num.trim()) - 1);
+      
+      if (newOrder.length !== pages.length) {
+        alert(`Please provide exactly ${pages.length} positions`);
+        return;
+      }
+
+      const validPositions = newOrder.every(pos => pos >= 0 && pos < pages.length);
+      const uniquePositions = new Set(newOrder).size === newOrder.length;
+
+      if (!validPositions || !uniquePositions) {
+        alert('Invalid positions. Please use each number from 1 to ' + pages.length + ' exactly once.');
+        return;
+      }
+
+      const reorderedPages = newOrder.map(oldIndex => pages[oldIndex]);
+      setPages(reorderedPages.map((page, index) => ({ ...page, order: index })));
+      setRearrangeInput('');
+    } catch (error) {
+      alert('Invalid input format. Please use comma-separated numbers.');
+    }
   };
 
   // Export to PDF
@@ -461,21 +612,55 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           <h1 style={{ color: '#00bfff', margin: 0, fontSize: '24px', fontWeight: 'bold' }}>
             📄 PDF Master
           </h1>
-          <input
-            type="text"
-            value={sessionName}
-            onChange={(e) => setSessionName(e.target.value)}
+          {isEditingSessionName ? (
+            <input
+              type="text"
+              value={sessionName}
+              onChange={(e) => setSessionName(e.target.value)}
+              onBlur={() => setIsEditingSessionName(false)}
+              onKeyPress={(e) => e.key === 'Enter' && setIsEditingSessionName(false)}
+              autoFocus
+              style={{
+                background: 'rgba(0, 255, 255, 0.1)',
+                border: '1px solid rgba(0, 255, 255, 0.3)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                color: '#00bfff',
+                fontSize: '14px',
+                minWidth: '200px'
+              }}
+            />
+          ) : (
+            <div
+              onClick={() => setIsEditingSessionName(true)}
+              style={{
+                background: 'rgba(0, 255, 255, 0.1)',
+                border: '1px solid rgba(0, 255, 255, 0.3)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                color: '#00bfff',
+                fontSize: '14px',
+                minWidth: '200px',
+                cursor: 'pointer'
+              }}
+            >
+              {sessionName}
+            </div>
+          )}
+          <button
+            onClick={() => setShowSessionManager(!showSessionManager)}
             style={{
-              background: 'rgba(0, 255, 255, 0.1)',
+              background: 'rgba(0, 255, 255, 0.2)',
               border: '1px solid rgba(0, 255, 255, 0.3)',
               borderRadius: '8px',
               padding: '8px 12px',
               color: '#00bfff',
-              fontSize: '14px',
-              minWidth: '200px'
+              cursor: 'pointer',
+              fontSize: '12px'
             }}
-            placeholder="Session name..."
-          />
+          >
+            📋 Sessions ({sessions.length})
+          </button>
         </div>
         
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -530,6 +715,277 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         </div>
       </div>
 
+      {/* Session Manager - exact same as cropper */}
+      {showSessionManager && (
+        <div style={{
+          background: 'rgba(0, 20, 40, 0.95)',
+          borderBottom: '1px solid rgba(0, 255, 255, 0.2)',
+          padding: '16px 24px',
+          maxHeight: '200px',
+          overflowY: 'auto'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ color: '#00bfff', margin: 0 }}>Session Manager</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={createNewSession}
+                style={{
+                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                ➕ New Session
+              </button>
+              <button
+                onClick={() => setShowSessionManager(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                ✕ Close
+              </button>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {sessions.map(session => (
+              <div
+                key={session.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: session.id === currentSessionId ? 'rgba(0, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                  border: session.id === currentSessionId ? '1px solid #00bfff' : '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '6px',
+                  padding: '8px 12px'
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: '#00bfff', fontWeight: 'bold', fontSize: '14px' }}>
+                    {session.name}
+                  </div>
+                  <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px' }}>
+                    {session.pageCount} pages • Modified: {new Date(session.modifiedAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={() => duplicateSession(session.id)}
+                    style={{
+                      background: 'rgba(33, 150, 243, 0.8)',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '10px'
+                    }}
+                  >
+                    📋 Copy
+                  </button>
+                  <button
+                    onClick={() => deleteSession(session.id)}
+                    style={{
+                      background: 'rgba(244, 67, 54, 0.8)',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '10px'
+                    }}
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+            {sessions.length === 0 && (
+              <div style={{ color: 'rgba(255, 255, 255, 0.5)', textAlign: 'center', padding: '20px' }}>
+                No sessions saved yet
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Rearrange Options Modal - exact same as cropper */}
+      {showRearrangeOptions && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.95), rgba(0, 40, 80, 0.9))',
+            border: '2px solid rgba(0, 255, 255, 0.3)',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%'
+          }}>
+            <h3 style={{ color: '#00bfff', textAlign: 'center', marginBottom: '24px' }}>
+              Choose Rearrange Method
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <button
+                onClick={startArrowRearrange}
+                style={{
+                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '16px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px'
+                }}
+              >
+                🔄 Rearrange with Arrow Buttons
+              </button>
+              
+              <button
+                onClick={startInputRearrange}
+                style={{
+                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '16px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px'
+                }}
+              >
+                ⌨️ Rearrange with Input Numbers
+              </button>
+              
+              <button
+                onClick={() => setShowRearrangeOptions(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '12px',
+                  padding: '12px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Input Rearrange Modal - exact same as cropper */}
+      {rearrangeInput !== '' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.95), rgba(0, 40, 80, 0.9))',
+            border: '2px solid rgba(0, 255, 255, 0.3)',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '600px',
+            width: '90%'
+          }}>
+            <h3 style={{ color: '#00bfff', textAlign: 'center', marginBottom: '16px' }}>
+              Rearrange Pages by Position
+            </h3>
+            <p style={{ color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', marginBottom: '24px', fontSize: '14px' }}>
+              Enter the new order using comma-separated numbers (1 to {pages.length}):
+            </p>
+            
+            <input
+              type="text"
+              value={rearrangeInput}
+              onChange={(e) => setRearrangeInput(e.target.value)}
+              placeholder={`Example: ${pages.map((_, i) => i + 1).join(',')}`}
+              style={{
+                width: '100%',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(0, 255, 255, 0.3)',
+                borderRadius: '8px',
+                padding: '12px',
+                color: '#00bfff',
+                fontSize: '14px',
+                marginBottom: '20px'
+              }}
+            />
+            
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={applyInputRearrange}
+                style={{
+                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '12px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Apply Rearrangement
+              </button>
+              <button
+                onClick={() => setRearrangeInput('')}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '8px',
+                  padding: '12px 24px',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar - same as cropper */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))',
@@ -581,7 +1037,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 Clear
               </button>
               <button
-                onClick={() => setRearrangeMode(!rearrangeMode)}
+                onClick={handleRearrangeClick}
                 style={{
                   background: rearrangeMode ? 'linear-gradient(45deg, #4CAF50, #45a049)' : 'rgba(0, 255, 255, 0.2)',
                   border: '1px solid rgba(0, 255, 255, 0.3)',
