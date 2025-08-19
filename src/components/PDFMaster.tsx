@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../PDF-Toolkit/src/components/ui/accordion';
+import { RadioGroup, RadioGroupItem } from '../PDF-Toolkit/src/components/ui/radio-group';
+import { Label } from '../PDF-Toolkit/src/components/ui/label';
+import { Button } from '../PDF-Toolkit/src/components/ui/button';
+import { Loader2, MoveLeft, MoveRight, Merge, SendToBack, Scaling, BookType, Image, FileArchive } from 'lucide-react';
 
 // Set up PDF.js worker - use local worker to avoid CDN issues
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
@@ -34,7 +39,7 @@ interface ProcessingJob {
   id: string;
   sessionId: string;
   sessionName: string;
-  type: 'pdf' | 'presentation' | 'upload';
+  type: 'pdf' | 'presentation' | 'upload' | 'merge' | 'organize' | 'resize' | 'edit' | 'optimize';
   status: 'processing' | 'completed' | 'error';
   progress: number;
   total: number;
@@ -42,13 +47,63 @@ interface ProcessingJob {
   timestamp: number;
 }
 
+interface pdfItemType {
+  id: number;
+  file: File;
+}
+
+enum Direction {
+  Top,
+  Right,
+  Bottom,
+  Left
+}
+
 interface PDFMasterProps {
   isVisible: boolean;
   onClose: () => void;
 }
 
+// PDF Toolkit functions
+const renderPdfPage = async (file: File, canvasRef: React.RefObject<HTMLCanvasElement>, pageNumber: number) => {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1.5 });
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
+    const renderContext = {
+      canvasContext: context,
+      viewport: viewport,
+    };
+
+    await page.render(renderContext).promise;
+  } catch (error) {
+    console.error('Error rendering PDF page:', error);
+  }
+};
+
+const downloadFile = (buffer: ArrayBuffer, mimeType: string, filename: string = 'document') => {
+  const blob = new Blob([buffer], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filename}.pdf`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
-  // Tab-based session management - exactly like cropper
+  // Tab-based session management
   const [sessions, setSessions] = useState<PDFSession[]>([{
     id: 'pdf-session-1',
     name: 'PDF Session 1',
@@ -60,7 +115,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState('');
 
-  // Global processing queue for all sessions
+  // Global processing queue
   const [processingJobs, setProcessingJobs] = useState<ProcessingJob[]>([]);
   const [globalProcessingCount, setGlobalProcessingCount] = useState(0);
 
@@ -68,27 +123,80 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
   const [pages, setPages] = useState<PDFPage[]>(activeSession.pages);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
-  
-  // Check if current session has any processing jobs
-  const currentSessionJobs = processingJobs.filter(job => job.sessionId === activeSessionId);
-  const isCurrentSessionProcessing = currentSessionJobs.some(job => job.status === 'processing');
-  const globalProcessingStatus = processingJobs.find(job => job.status === 'processing')?.message || '';
 
-  // Exact same floating and zoom functionality as cropper
+  // PDF Toolkit specific states
+  const [currentTool, setCurrentTool] = useState<string>('home');
+  const [uploaded, setUploaded] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pdfDoc, setPdfDoc] = useState<PDFDocument | null>(null);
+  const [originalDoc, setOriginalDoc] = useState<PDFDocument | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [marginValue, setMarginValue] = useState<number>(0);
+  const [isMultiple, setIsMultiple] = useState<boolean>(false);
+  const [mergePdfItems, setMergePdfItems] = useState<pdfItemType[]>([]);
+
+  // UI states
   const [floatingPages, setFloatingPages] = useState<{[key: string]: {visible: boolean, position: {x: number, y: number}, size: {width: number, height: number}}}>({});
   const [zoomedPages, setZoomedPages] = useState<Set<string>>(new Set());
   const [rearrangeMode, setRearrangeMode] = useState(false);
-
-  // Rearrange options - exact same as cropper
   const [showRearrangeOptions, setShowRearrangeOptions] = useState(false);
   const [rearrangeInput, setRearrangeInput] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const mergePdfInputRef = useRef<HTMLInputElement>(null);
+  const organizePdfInputRef = useRef<HTMLInputElement>(null);
+  const resizePdfInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const floatingRefs = useRef<{[key: string]: HTMLDivElement}>({});
 
-  // Session management functions - exact same as cropper
+  // Check if current session has any processing jobs
+  const currentSessionJobs = processingJobs.filter(job => job.sessionId === activeSessionId);
+  const isCurrentSessionProcessing = currentSessionJobs.some(job => job.status === 'processing');
+  const globalProcessingStatus = processingJobs.find(job => job.status === 'processing')?.message || '';
+
+  // Tool definitions from PDF Toolkit
+  const tools = [
+    {
+      title: "Merge PDF",
+      content: "Drag and rotate PDFs in the order you want with the easiest PDF merger available.",
+      pageName: "mergePdf",
+      icon: <Merge color={"white"} size={30} />
+    },
+    {
+      title: "Organize PDF", 
+      content: "Sort, rotate, convert to image, insert images as pdf-page and remove pages.",
+      pageName: "organizePdf",
+      icon: <SendToBack color={"white"} size={30} />
+    },
+    {
+      title: "Resize PDF",
+      content: "Resize page to different dimensions, add or remove margins.",
+      pageName: "resizePdf", 
+      icon: <Scaling color={"white"} size={30} />
+    },
+    {
+      title: "Edit PDF",
+      content: "Edit PDF by adding text, shapes, comments and highlights. Your secure and simple tool to edit PDF.",
+      pageName: "editPdf",
+      icon: <BookType color={"white"} size={30} />
+    },
+    {
+      title: "PDF to Image",
+      content: "Convert PDF page into a image.",
+      pageName: "pdfToImage",
+      icon: <Image color={"white"} size={30} />
+    },
+    {
+      title: "Image to PDF", 
+      content: "Convert images to PDF in seconds.",
+      pageName: "imageToPdf",
+      icon: <FileArchive color={"white"} size={30} />
+    }
+  ];
+
+  // Session management functions
   const generateSessionId = () => `pdf_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const saveCurrentSession = useCallback(() => {
@@ -118,7 +226,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  const addProcessingJob = (sessionId: string, sessionName: string, type: 'pdf' | 'presentation' | 'upload', total: number): string => {
+  const addProcessingJob = (sessionId: string, sessionName: string, type: ProcessingJob['type'], total: number): string => {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newJob: ProcessingJob = {
       id: jobId,
@@ -147,68 +255,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       job.id === jobId ? { ...job, status, message } : job
     ));
     setGlobalProcessingCount(prev => Math.max(0, prev - 1));
-    // Auto-remove completed/error jobs after 5 seconds
     setTimeout(() => {
       setProcessingJobs(prev => prev.filter(job => job.id !== jobId));
     }, 5000);
   };
 
-  const addNewSession = () => {
-    const newSessionId = generateSessionId();
-    const newSession: PDFSession = {
-      id: newSessionId,
-      name: `PDF Session ${sessions.length + 1}`,
-      pages: [],
-      createdAt: Date.now(),
-      modifiedAt: Date.now()
-    };
-
-    setSessions(prev => [...prev, newSession]);
-    switchToSession(newSessionId);
-  };
-
-  const closeSession = (sessionId: string) => {
-    if (sessions.length === 1) return; // Don't close last session
-
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
-
-    if (sessionId === activeSessionId) {
-      const remainingSessions = sessions.filter(s => s.id !== sessionId);
-      if (remainingSessions.length > 0) {
-        switchToSession(remainingSessions[0].id);
-      }
+  // PDF Toolkit Upload Functions
+  const checkFileFormat = useCallback((files: FileList, allowedTypes: string) => {
+    const file = Array.from(files).find((file) => {
+      return !(allowedTypes.includes(file.type));
+    });
+    if (file) {
+      alert("One of the files have invalid format");
     }
-  };
+    return file === undefined;
+  }, []);
 
-  const startEditingTab = (sessionId: string, currentName: string) => {
-    setEditingTabId(sessionId);
-    setEditingTabName(currentName);
-  };
-
-  const finishEditingTab = () => {
-    if (editingTabId && editingTabName.trim()) {
-      setSessions(prev => prev.map(session =>
-        session.id === editingTabId
-          ? { ...session, name: editingTabName.trim() }
-          : session
-      ));
-    }
-    setEditingTabId(null);
-    setEditingTabName('');
-  };
-
-  const cancelEditingTab = () => {
-    setEditingTabId(null);
-    setEditingTabName('');
-  };
-
-  useEffect(() => {
-    if (pages.length > 0) {
-      saveCurrentSession();
-    }
-  }, [pages, saveCurrentSession]);
-
-  // Convert image file to PDFPage - same as cropper logic
+  // Convert image file to PDFPage
   const imageToPage = async (file: File, order: number): Promise<PDFPage | null> => {
     try {
       if (file.size > 10 * 1024 * 1024) {
@@ -254,11 +317,117 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  // Handle image upload - exactly like cropper
+  // Handle file uploads for different tools
+  const handleMergePdfUpload = useCallback(async (files: File[]) => {
+    if (!checkFileFormat(new FileList(), "application/pdf")) return;
+
+    let items: pdfItemType[] = [];
+    files.forEach((file, index) => {
+      items.push({ id: index + 1, file });
+    });
+    setUploaded(true);
+    setMergePdfItems(items);
+    setCurrentTool('mergePdf');
+  }, [checkFileFormat]);
+
+  const handleOrganizePdfUpload = useCallback(async (files: File[]) => {
+    setUploaded(true);
+    setCurrentTool('organizePdf');
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'organize', files.length);
+
+    let count = 0;
+    let items: pdfItemType[] = [];
+
+    try {
+      for (const file of files) {
+        updateProcessingJob(jobId, {
+          progress: count,
+          message: `Processing ${file.name}...`
+        });
+
+        if (file.type === "application/pdf") {
+          const res = await fetch(URL.createObjectURL(file));
+          const arrayBuffer = await res.arrayBuffer();
+          const srcDoc = await PDFDocument.load(arrayBuffer);
+
+          for (const pageIndex of srcDoc.getPageIndices()) {
+            const tempPdf = await PDFDocument.create();
+            const copiedPage = await tempPdf.copyPages(srcDoc, [pageIndex]);
+            tempPdf.addPage(copiedPage[0]);
+            const buffer = await tempPdf.save();
+            const newFile = new File([buffer], `Page-${pageIndex + 1} ${file.name}`, { type: "application/pdf" });
+            items.push({ file: newFile, id: count++ });
+          }
+        } else {
+          // Handle image files
+          const tempImage = document.createElement("img");
+          tempImage.src = URL.createObjectURL(file);
+          const canvas = document.createElement("canvas");
+
+          await new Promise((resolve) => {
+            tempImage.onload = () => {
+              canvas.width = tempImage.naturalWidth;
+              canvas.height = tempImage.naturalHeight;
+              resolve("done");
+            };
+          });
+
+          const ctx = canvas.getContext("2d")!;
+          ctx.drawImage(tempImage, 0, 0, canvas.width, canvas.height);
+          const imageUrl = canvas.toDataURL("image/png", 1);
+          const pdfDoc = await PDFDocument.create();
+          const embeddedImg = await pdfDoc.embedPng(imageUrl);
+          const page = pdfDoc.addPage();
+          page.setSize(embeddedImg.width, embeddedImg.height);
+          page.drawImage(embeddedImg, { x: 0, y: 0 });
+          const buffer = await pdfDoc.save();
+          const newFile = new File([buffer], `${file.name}`, { type: "application/pdf" });
+          items.push({ file: newFile, id: count++ });
+        }
+      }
+
+      setMergePdfItems(items);
+      completeProcessingJob(jobId, 'completed', `Successfully organized ${items.length} items`);
+    } catch (err) {
+      console.error(err);
+      completeProcessingJob(jobId, 'error', 'Error organizing PDF files');
+    }
+  }, [activeSessionId, activeSession.name]);
+
+  const handleResizePdfUpload = useCallback(async (files: File[]) => {
+    if (!checkFileFormat(new FileList(), "application/pdf")) return;
+
+    setUploaded(true);
+    setCurrentTool('resizePdf');
+    const file = files[0];
+
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'resize', 1);
+
+    try {
+      await renderPdfPage(file, canvasRef, currentPage);
+      setLoading(false);
+
+      const url = URL.createObjectURL(file);
+      const res = await fetch(url);
+      const arrayBuffer = await res.arrayBuffer();
+      const srcDoc = await PDFDocument.load(arrayBuffer);
+      const tempSrc = await PDFDocument.load(arrayBuffer);
+      setOriginalDoc(tempSrc);
+      setPdfDoc(srcDoc);
+
+      completeProcessingJob(jobId, 'completed', 'PDF loaded successfully for resizing');
+    } catch (error) {
+      console.error('Error loading PDF for resize:', error);
+      completeProcessingJob(jobId, 'error', 'Error loading PDF');
+    }
+  }, [currentPage, activeSessionId, activeSession.name, checkFileFormat]);
+
+  // Image to PDF conversion (existing functionality preserved)
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
+    setCurrentTool('imageToPdf');
     const jobId = addProcessingJob(activeSessionId, activeSession.name, 'upload', files.length);
 
     try {
@@ -279,6 +448,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       }
 
       setPages(prev => [...prev, ...newPages]);
+      setUploaded(true);
       completeProcessingJob(jobId, 'completed', `Successfully processed ${newPages.length} images`);
     } catch (error) {
       console.error('Error uploading images:', error);
@@ -288,107 +458,158 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  // Fixed PDF upload with proper error handling
-  const handlePDFUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
+  // Resize PDF functions
+  const resetFile = useCallback(async () => {
+    if (originalDoc) {
+      setLoading(true);
+      const buffer = await originalDoc.save();
+      const newDoc = await PDFDocument.load(buffer);
+      setPdfDoc(newDoc);
+      const newFile = new File([buffer], "file", { type: "application/pdf" });
+      renderPdfPage(newFile, canvasRef, currentPage).then(() => {
+        setLoading(false);
+      });
+    }
+  }, [currentPage, originalDoc]);
 
-    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'upload', 1);
+  const changeMargin = useCallback(async (direction: Direction) => {
+    if (pdfDoc) {
+      setLoading(true);
+      let index;
+      const pages = pdfDoc.getPages();
+      const start = isMultiple ? 0 : currentPage - 1;
+      const end = isMultiple ? pages.length : currentPage;
 
-    try {
-      for (const file of files) {
-        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-          try {
-            updateProcessingJob(jobId, { message: `Loading PDF: ${file.name}` });
-            const arrayBuffer = await file.arrayBuffer();
-
-            // Configure PDF.js to use local worker
-            const loadingTask = pdfjs.getDocument({
-              data: arrayBuffer,
-              useWorkerFetch: false,
-              isEvalSupported: false,
-              useSystemFonts: true
-            });
-
-            const pdf = await loadingTask.promise;
-            const newPages: PDFPage[] = [];
-
-            updateProcessingJob(jobId, { 
-              total: pdf.numPages,
-              message: `Extracting ${pdf.numPages} pages...`
-            });
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-              updateProcessingJob(jobId, {
-                progress: i - 1,
-                message: `Extracting page ${i}/${pdf.numPages}`
-              });
-
-              try {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: 1.5 });
-
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                if (!context) {
-                  console.error('Could not get canvas context');
-                  continue;
-                }
-
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-
-                const renderContext = {
-                  canvasContext: context,
-                  viewport: viewport,
-                  canvas: canvas
-                };
-
-                await page.render(renderContext).promise;
-
-                const imageData = canvas.toDataURL('image/jpeg', 0.8);
-
-                const pdfPage: PDFPage = {
-                  id: `pdf_page_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
-                  name: `${file.name.replace('.pdf', '')}_page_${i}`,
-                  imageData,
-                  rotation: 0,
-                  crop: { x: 0, y: 0, width: viewport.width, height: viewport.height },
-                  order: pages.length + newPages.length,
-                  width: viewport.width,
-                  height: viewport.height
-                };
-
-                newPages.push(pdfPage);
-              } catch (pageError) {
-                console.error(`Error processing page ${i}:`, pageError);
-                updateProcessingJob(jobId, {
-                  message: `Error processing page ${i}, continuing...`
-                });
-              }
-            }
-
-            if (newPages.length > 0) {
-              setPages(prev => [...prev, ...newPages]);
-              completeProcessingJob(jobId, 'completed', `Successfully extracted ${newPages.length} pages from ${file.name}`);
-            } else {
-              completeProcessingJob(jobId, 'error', `No pages could be extracted from ${file.name}`);
-            }
-          } catch (pdfError) {
-            console.error('Error processing PDF:', pdfError);
-            completeProcessingJob(jobId, 'error', `Error processing ${file.name}: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
-          }
+      for (index = start; index < end; index++) {
+        const page = pages[index];
+        switch (direction) {
+          case Direction.Top: page.translateContent(0, -marginValue); break;
+          case Direction.Right: page.translateContent(-marginValue, 0); break;
+          case Direction.Bottom: page.translateContent(0, marginValue); break;
+          case Direction.Left: page.translateContent(marginValue, 0); break;
         }
       }
-    } catch (error) {
-      console.error('Error in PDF upload:', error);
-      completeProcessingJob(jobId, 'error', 'Error processing PDF files');
-    } finally {
-      if (event.target) event.target.value = '';
-    }
-  };
 
-  // Page manipulation - same as cropper
+      const buffer = await pdfDoc.save();
+      const newFile = new File([buffer], "final", { type: "application/pdf" });
+      const url = URL.createObjectURL(newFile);
+      const res = await fetch(url);
+      const arrayBuffer = await res.arrayBuffer();
+      const newDoc = await PDFDocument.load(arrayBuffer);
+      setPdfDoc(newDoc);
+      renderPdfPage(newFile, canvasRef, currentPage).then(() => {
+        setLoading(false);
+      });
+    }
+  }, [currentPage, isMultiple, marginValue, pdfDoc]);
+
+  const convertToPortrait = useCallback(async () => {
+    if (pdfDoc) {
+      setLoading(true);
+      let index;
+      const pages = pdfDoc.getPages();
+      const start = isMultiple ? 0 : currentPage - 1;
+      const end = isMultiple ? pages.length : currentPage;
+
+      for (index = start; index < end; index++) {
+        const page = pages[index];
+        const { width: w, height: h } = page.getSize();
+        if (w >= h) {
+          page.setSize(h, h * 1.5);
+          const scale = h / w;
+          page.scaleContent(scale, scale);
+          const contentHeight = scale * h;
+          const marginHeight = (h * 1.5) - contentHeight;
+          page.translateContent(0, marginHeight / 2);
+        }
+      }
+
+      const buffer = await pdfDoc.save();
+      const newDoc = await PDFDocument.load(buffer);
+      setPdfDoc(newDoc);
+      const newFile = new File([buffer], "final", { type: "application/pdf" });
+      renderPdfPage(newFile, canvasRef, currentPage).then(() => {
+        setLoading(false);
+      });
+    }
+  }, [currentPage, isMultiple, pdfDoc]);
+
+  const convertToLandscape = useCallback(async () => {
+    if (pdfDoc) {
+      setLoading(true);
+      let index;
+      const pages = pdfDoc.getPages();
+      const start = isMultiple ? 0 : currentPage - 1;
+      const end = isMultiple ? pages.length : currentPage;
+
+      for (index = start; index < end; index++) {
+        const page = pages[index];
+        const { width: w, height: h } = page.getSize();
+        if (h >= w) {
+          page.setWidth(h);
+          const marginWidth = h - w;
+          page.translateContent(marginWidth / 2, 0);
+        }
+      }
+
+      const buffer = await pdfDoc!.save();
+      const newDoc = await PDFDocument.load(buffer);
+      const newFile = new File([buffer], "final", { type: "application/pdf" });
+      setPdfDoc(newDoc);
+      renderPdfPage(newFile, canvasRef, currentPage).then(() => {
+        setLoading(false);
+      });
+    }
+  }, [currentPage, isMultiple, pdfDoc]);
+
+  const navigatePages = useCallback(async (value: number) => {
+    try {
+      const length = pdfDoc!.getPages().length;
+      if (value >= 1 && value <= length) {
+        setCurrentPage(value);
+        setLoading(true);
+        const buffer = await pdfDoc!.save();
+        const newFile = new File([buffer], "final", { type: "application/pdf" });
+        await renderPdfPage(newFile, canvasRef, value);
+        setLoading(false);
+      }
+    } catch (e) {
+      console.error('Error navigating pages:', e);
+    }
+  }, [pdfDoc]);
+
+  // Merge PDF function
+  const mergePdfs = useCallback(async () => {
+    if (mergePdfItems.length === 0) return;
+
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'merge', mergePdfItems.length);
+
+    try {
+      const mergedPdf = await PDFDocument.create();
+
+      for (let i = 0; i < mergePdfItems.length; i++) {
+        const item = mergePdfItems[i];
+        updateProcessingJob(jobId, {
+          progress: i,
+          message: `Merging ${item.file.name}...`
+        });
+
+        const arrayBuffer = await item.file.arrayBuffer();
+        const pdf = await PDFDocument.load(arrayBuffer);
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+      }
+
+      const mergedPdfBytes = await mergedPdf.save();
+      downloadFile(mergedPdfBytes, 'application/pdf', 'merged_document');
+      completeProcessingJob(jobId, 'completed', 'PDFs merged successfully!');
+    } catch (error) {
+      console.error('Error merging PDFs:', error);
+      completeProcessingJob(jobId, 'error', 'Error merging PDFs');
+    }
+  }, [mergePdfItems, activeSessionId, activeSession.name]);
+
+  // Page manipulation functions (preserved from original)
   const rotatePage = (pageId: string, direction: 'left' | 'right') => {
     setPages(prev => prev.map(page => {
       if (page.id === pageId) {
@@ -410,7 +631,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     });
   };
 
-  // Enhanced directional movement - up, down, left, right
   const movePageUp = (index: number) => {
     if (index > 0) {
       setPages(prev => {
@@ -431,74 +651,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  const movePageLeft = (index: number) => {
-    // Move to beginning of row or previous position
-    if (index > 0) {
-      movePageUp(index);
-    }
-  };
-
-  const movePageRight = (index: number) => {
-    // Move to end of row or next position
-    if (index < pages.length - 1) {
-      movePageDown(index);
-    }
-  };
-
-  const reversePagesOrder = () => {
-    setPages(prev => {
-      const reversed = [...prev].reverse();
-      return reversed.map((page, index) => ({ ...page, order: index }));
-    });
-  };
-
-  // Advanced rearrange functionality - exact same as cropper
-  const handleRearrangeClick = () => {
-    if (!rearrangeMode) {
-      setShowRearrangeOptions(true);
-    } else {
-      setRearrangeMode(false);
-      setShowRearrangeOptions(false);
-    }
-  };
-
-  const startArrowRearrange = () => {
-    setRearrangeMode(true);
-    setShowRearrangeOptions(false);
-  };
-
-  const startInputRearrange = () => {
-    const currentOrder = pages.map((_, index) => index + 1).join(',');
-    setRearrangeInput(currentOrder);
-    setShowRearrangeOptions(false);
-  };
-
-  const applyInputRearrange = () => {
-    try {
-      const newOrder = rearrangeInput.split(',').map(num => parseInt(num.trim()) - 1);
-
-      if (newOrder.length !== pages.length) {
-        alert(`Please provide exactly ${pages.length} positions`);
-        return;
-      }
-
-      const validPositions = newOrder.every(pos => pos >= 0 && pos < pages.length);
-      const uniquePositions = new Set(newOrder).size === newOrder.length;
-
-      if (!validPositions || !uniquePositions) {
-        alert('Invalid positions. Please use each number from 1 to ' + pages.length + ' exactly once.');
-        return;
-      }
-
-      const reorderedPages = newOrder.map(oldIndex => pages[oldIndex]);
-      setPages(reorderedPages.map((page, index) => ({ ...page, order: index })));
-      setRearrangeInput('');
-    } catch (error) {
-      alert('Invalid input format. Please use comma-separated numbers.');
-    }
-  };
-
-  // Export to PDF
+  // Export functions (preserved)
   const exportToPDF = async () => {
     if (pages.length === 0) {
       alert('No pages to export');
@@ -520,7 +673,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
-
         canvas.width = page.crop.width;
         canvas.height = page.crop.height;
 
@@ -552,15 +704,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
       updateProcessingJob(jobId, { message: 'Finalizing PDF...' });
       const pdfBytes = await pdfDoc.save();
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${activeSession.name.replace(/\s+/g, '_')}.pdf`;
-      link.click();
-
-      URL.revokeObjectURL(url);
+      downloadFile(pdfBytes, 'application/pdf', activeSession.name);
       completeProcessingJob(jobId, 'completed', 'PDF exported successfully!');
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -568,37 +712,12 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  // Selection functions - same as cropper
-  const togglePageSelection = (pageId: string) => {
-    setSelectedPages(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(pageId)) {
-        newSet.delete(pageId);
-      } else {
-        newSet.add(pageId);
-      }
-      return newSet;
-    });
-  };
-
-  const selectAllPages = () => {
-    setSelectedPages(new Set(pages.map(page => page.id)));
-  };
-
-  const clearSelection = () => {
-    setSelectedPages(new Set());
-  };
-
-  // Floating functionality - EXACT same as cropper
+  // Floating functionality (preserved)
   const toggleFloating = (pageId: string) => {
     setFloatingPages(prev => {
       const isCurrentlyFloating = prev[pageId]?.visible || false;
-
       if (isCurrentlyFloating) {
-        return {
-          ...prev,
-          [pageId]: { ...prev[pageId], visible: false }
-        };
+        return { ...prev, [pageId]: { ...prev[pageId], visible: false } };
       } else {
         return {
           ...prev,
@@ -610,13 +729,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         };
       }
     });
-  };
-
-  const closeFloatingPage = (pageId: string) => {
-    setFloatingPages(prev => ({
-      ...prev,
-      [pageId]: { ...prev[pageId], visible: false }
-    }));
   };
 
   const toggleZoom = (pageId: string) => {
@@ -631,38 +743,11 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     });
   };
 
-  // Drag functionality for floating windows
-  const handleMouseDown = (pageId: string, e: React.MouseEvent) => {
-    const floatingEl = floatingRefs.current[pageId];
-    if (!floatingEl) return;
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const rect = floatingEl.getBoundingClientRect();
-    const offsetX = startX - rect.left;
-    const offsetY = startY - rect.top;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const newX = e.clientX - offsetX;
-      const newY = e.clientY - offsetY;
-
-      setFloatingPages(prev => ({
-        ...prev,
-        [pageId]: {
-          ...prev[pageId],
-          position: { x: Math.max(0, newX), y: Math.max(0, newY) }
-        }
-      }));
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
+  useEffect(() => {
+    if (pages.length > 0) {
+      saveCurrentSession();
+    }
+  }, [pages, saveCurrentSession]);
 
   if (!isVisible) return null;
 
@@ -679,7 +764,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       display: 'flex',
       flexDirection: 'column'
     }}>
-      {/* Header - same as cropper style */}
+      {/* Header */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))',
         backdropFilter: 'blur(10px)',
@@ -691,61 +776,46 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <h1 style={{ color: '#00bfff', margin: 0, fontSize: '24px', fontWeight: 'bold' }}>
-            📄 PDF Master
+            📄 PDF Master - Enhanced Toolkit
           </h1>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isCurrentSessionProcessing}
-            style={{
-              background: 'linear-gradient(45deg, #4CAF50, #45a049)',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '10px 16px',
-              color: 'white',
-              cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              opacity: isCurrentSessionProcessing ? 0.7 : 1
-            }}
-          >
-            📁 Upload Images
-          </button>
+          {currentTool === 'home' && (
+            <>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isCurrentSessionProcessing}
+                style={{
+                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  color: 'white',
+                  cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  opacity: isCurrentSessionProcessing ? 0.7 : 1
+                }}
+              >
+                📁 Upload Images
+              </button>
 
-          <button
-            onClick={() => pdfInputRef.current?.click()}
-            disabled={isCurrentSessionProcessing}
-            style={{
-              background: 'linear-gradient(45deg, #FF9800, #F57C00)',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '10px 16px',
-              color: 'white',
-              cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              opacity: isCurrentSessionProcessing ? 0.7 : 1
-            }}
-          >
-            📄 Upload PDF
-          </button>
-
-          <button
-            onClick={() => folderInputRef.current?.click()}
-            disabled={isCurrentSessionProcessing}
-            style={{
-              background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '10px 16px',
-              color: 'white',
-              cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              opacity: isCurrentSessionProcessing ? 0.7 : 1
-            }}
-          >
-            📁 Upload Folder
-          </button>
+              <button
+                onClick={() => setCurrentTool('home')}
+                style={{
+                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                🏠 Tools Home
+              </button>
+            </>
+          )}
 
           <button
             onClick={onClose}
@@ -764,843 +834,858 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         </div>
       </div>
 
-      {/* Tab System - EXACTLY like cropper */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))',
-        borderBottom: '1px solid rgba(0, 255, 255, 0.2)',
-        padding: '8px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        overflowX: 'auto'
-      }}>
-        {sessions.map(session => (
-          <div
-            key={session.id}
-            style={{
-              padding: '8px 10px',
-              background: session.id === activeSessionId ? '#444' : '#222',
-              color: 'white',
-              borderRadius: '3px',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {editingTabId === session.id ? (
-              <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  value={editingTabName}
-                  onChange={(e) => setEditingTabName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') finishEditingTab();
-                    if (e.key === 'Escape') cancelEditingTab();
+      {/* Main Content */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
+        {currentTool === 'home' ? (
+          // PDF Toolkit Home - Tool Selection
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            height: '100%'
+          }}>
+            <h2 style={{ color: '#00bfff', marginBottom: '32px', fontSize: '32px' }}>
+              Choose Your PDF Tool
+            </h2>
+
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '20px',
+              maxWidth: '1200px'
+            }}>
+              {tools.map((tool, index) => (
+                <div
+                  key={index}
+                  onClick={() => {
+                    if (tool.pageName === 'mergePdf') {
+                      mergePdfInputRef.current?.click();
+                    } else if (tool.pageName === 'organizePdf') {
+                      organizePdfInputRef.current?.click();
+                    } else if (tool.pageName === 'resizePdf') {
+                      resizePdfInputRef.current?.click();
+                    } else if (tool.pageName === 'imageToPdf') {
+                      fileInputRef.current?.click();
+                    } else {
+                      setCurrentTool(tool.pageName);
+                    }
                   }}
-                  onBlur={finishEditingTab}
-                  autoFocus
                   style={{
-                    background: '#555',
-                    border: '1px solid #777',
+                    background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))',
+                    border: '2px solid rgba(0, 255, 255, 0.3)',
+                    borderRadius: '16px',
+                    padding: '24px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    width: '280px',
+                    minHeight: '180px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textAlign: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-5px)';
+                    e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 255, 255, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{ marginBottom: '16px' }}>
+                    {tool.icon}
+                  </div>
+                  <h3 style={{ color: '#00bfff', margin: '0 0 12px 0', fontSize: '18px' }}>
+                    {tool.title}
+                  </h3>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.8)', margin: 0, fontSize: '14px', lineHeight: '1.4' }}>
+                    {tool.content}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : currentTool === 'mergePdf' ? (
+          // Merge PDF Tool
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <h2 style={{ color: '#00bfff', fontSize: '28px', marginBottom: '8px' }}>Merge PDF</h2>
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                Drag and rotate PDFs in the order you want with the easiest PDF merger available.
+              </p>
+            </div>
+
+            {mergePdfItems.length > 0 ? (
+              <div>
+                <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                  <Button 
+                    onClick={mergePdfs}
+                    style={{
+                      background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                      padding: '12px 24px',
+                      fontSize: '16px'
+                    }}
+                  >
+                    🔗 Merge PDFs ({mergePdfItems.length} files)
+                  </Button>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: '16px'
+                }}>
+                  {mergePdfItems.map((item, index) => (
+                    <div key={item.id} style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(0, 255, 255, 0.3)',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ color: '#00bfff', fontSize: '24px', marginBottom: '8px' }}>📄</div>
+                      <p style={{ color: 'white', fontSize: '14px', margin: 0 }}>
+                        {index + 1}. {item.file.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                border: '2px dashed rgba(0, 255, 255, 0.3)',
+                borderRadius: '12px',
+                padding: '40px',
+                textAlign: 'center',
+                cursor: 'pointer'
+              }}
+              onClick={() => mergePdfInputRef.current?.click()}
+              >
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📁</div>
+                <p style={{ color: '#00bfff', fontSize: '18px', margin: 0 }}>
+                  Click to upload PDF files for merging
+                </p>
+              </div>
+            )}
+
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <Button 
+                onClick={() => setCurrentTool('home')}
+                style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+              >
+                ← Back to Tools
+              </Button>
+            </div>
+          </div>
+        ) : currentTool === 'organizePdf' ? (
+          // Organize PDF Tool
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <h2 style={{ color: '#00bfff', fontSize: '28px', marginBottom: '8px' }}>Organize PDF</h2>
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                Sort, rotate, convert to image, insert images as pdf-page and remove pages.
+              </p>
+            </div>
+
+            {mergePdfItems.length > 0 ? (
+              <div>
+                <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                  <Button 
+                    onClick={mergePdfs}
+                    style={{
+                      background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                      padding: '12px 24px',
+                      fontSize: '16px'
+                    }}
+                  >
+                    📋 Organize & Combine ({mergePdfItems.length} items)
+                  </Button>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: '16px'
+                }}>
+                  {mergePdfItems.map((item, index) => (
+                    <div key={item.id} style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(0, 255, 255, 0.3)',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ color: '#00bfff', fontSize: '24px', marginBottom: '8px' }}>
+                        {item.file.type === 'application/pdf' ? '📄' : '🖼️'}
+                      </div>
+                      <p style={{ color: 'white', fontSize: '14px', margin: 0 }}>
+                        {index + 1}. {item.file.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                border: '2px dashed rgba(0, 255, 255, 0.3)',
+                borderRadius: '12px',
+                padding: '40px',
+                textAlign: 'center',
+                cursor: 'pointer'
+              }}
+              onClick={() => organizePdfInputRef.current?.click()}
+              >
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📁</div>
+                <p style={{ color: '#00bfff', fontSize: '18px', margin: 0 }}>
+                  Click to upload PDFs and images for organizing
+                </p>
+              </div>
+            )}
+
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <Button 
+                onClick={() => setCurrentTool('home')}
+                style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+              >
+                ← Back to Tools
+              </Button>
+            </div>
+          </div>
+        ) : currentTool === 'resizePdf' ? (
+          // Resize PDF Tool
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <h2 style={{ color: '#00bfff', fontSize: '28px', marginBottom: '8px' }}>Resize PDF</h2>
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                Resize page to different dimensions, add or remove margins.
+              </p>
+            </div>
+
+            {uploaded && pdfDoc ? (
+              <div>
+                {/* PDF Preview Canvas */}
+                <div style={{ 
+                  textAlign: 'center',
+                  marginBottom: '20px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  position: 'relative'
+                }}>
+                  <canvas 
+                    ref={canvasRef} 
+                    style={{ 
+                      border: '2px solid rgba(0, 255, 255, 0.3)', 
+                      borderRadius: '8px',
+                      maxWidth: '100%',
+                      height: 'auto'
+                    }}
+                  />
+                  {loading && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)'
+                    }}>
+                      <Loader2 style={{ color: '#00bfff', animation: 'spin 1s linear infinite' }} size={32} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Page Navigation */}
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center', 
+                  gap: '16px',
+                  marginBottom: '24px'
+                }}>
+                  <button
+                    onClick={() => navigatePages(currentPage - 1)}
+                    style={{
+                      background: 'rgba(0, 255, 255, 0.2)',
+                      border: '1px solid rgba(0, 255, 255, 0.3)',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      color: '#00bfff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <MoveLeft size={20} />
+                  </button>
+
+                  <input
+                    type="number"
+                    value={currentPage}
+                    min={1}
+                    max={pdfDoc.getPages().length}
+                    onChange={(e) => navigatePages(Number(e.target.value))}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(0, 255, 255, 0.3)',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      color: '#00bfff',
+                      textAlign: 'center',
+                      width: '80px'
+                    }}
+                  />
+
+                  <button
+                    onClick={() => navigatePages(currentPage + 1)}
+                    style={{
+                      background: 'rgba(0, 255, 255, 0.2)',
+                      border: '1px solid rgba(0, 255, 255, 0.3)',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      color: '#00bfff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <MoveRight size={20} />
+                  </button>
+                </div>
+
+                {/* Control Buttons */}
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  gap: '12px',
+                  marginBottom: '24px'
+                }}>
+                  <Button 
+                    onClick={async () => {
+                      if (pdfDoc) {
+                        const buffer = await pdfDoc.save();
+                        downloadFile(buffer, 'application/pdf', 'resized_document');
+                      }
+                    }}
+                    style={{ background: 'linear-gradient(45deg, #4CAF50, #45a049)' }}
+                  >
+                    💾 Download
+                  </Button>
+                  <Button 
+                    onClick={resetFile}
+                    style={{ background: 'linear-gradient(45deg, #f44336, #d32f2f)' }}
+                  >
+                    🔄 Reset
+                  </Button>
+                </div>
+
+                {/* Resize Options */}
+                <Accordion type="single" collapsible style={{ marginBottom: '20px' }}>
+                  <AccordionItem value="item-1">
+                    <AccordionTrigger style={{ color: '#00bfff' }}>
+                      PDF Page Resize
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div style={{ marginBottom: '16px' }}>
+                        <RadioGroup 
+                          value={isMultiple ? "all" : "current"}
+                          onValueChange={(value) => setIsMultiple(value === "all")}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <RadioGroupItem value="current" id="r1" />
+                            <Label htmlFor="r1" style={{ color: 'white' }}>Current Page</Label>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <RadioGroupItem value="all" id="r2" />
+                            <Label htmlFor="r2" style={{ color: 'white' }}>All Pages</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={convertToPortrait}
+                          style={{
+                            background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '12px 20px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          📱 Portrait
+                        </button>
+                        <button
+                          onClick={convertToLandscape}
+                          style={{
+                            background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '12px 20px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          🖥️ Landscape
+                        </button>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="item-2">
+                    <AccordionTrigger style={{ color: '#00bfff' }}>
+                      Margin Adjustment
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                        <input
+                          type="number"
+                          value={marginValue}
+                          onChange={(e) => setMarginValue(Number(e.target.value))}
+                          placeholder="Margin value"
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            border: '1px solid rgba(0, 255, 255, 0.3)',
+                            borderRadius: '6px',
+                            padding: '8px',
+                            color: '#00bfff',
+                            width: '120px'
+                          }}
+                        />
+
+                        <RadioGroup 
+                          value={isMultiple ? "all" : "current"}
+                          onValueChange={(value) => setIsMultiple(value === "all")}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <RadioGroupItem value="current" id="m1" />
+                            <Label htmlFor="m1" style={{ color: 'white' }}>Current</Label>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <RadioGroupItem value="all" id="m2" />
+                            <Label htmlFor="m2" style={{ color: 'white' }}>All</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => changeMargin(Direction.Top)}
+                          style={{
+                            background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px 16px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ⬆️ Top
+                        </button>
+                        <button
+                          onClick={() => changeMargin(Direction.Right)}
+                          style={{
+                            background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px 16px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ➡️ Right
+                        </button>
+                        <button
+                          onClick={() => changeMargin(Direction.Bottom)}
+                          style={{
+                            background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px 16px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ⬇️ Bottom
+                        </button>
+                        <button
+                          onClick={() => changeMargin(Direction.Left)}
+                          style={{
+                            background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px 16px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ⬅️ Left
+                        </button>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </div>
+            ) : (
+              <div style={{
+                border: '2px dashed rgba(0, 255, 255, 0.3)',
+                borderRadius: '12px',
+                padding: '40px',
+                textAlign: 'center',
+                cursor: 'pointer'
+              }}
+              onClick={() => resizePdfInputRef.current?.click()}
+              >
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📄</div>
+                <p style={{ color: '#00bfff', fontSize: '18px', margin: 0 }}>
+                  Click to upload a PDF file for resizing
+                </p>
+              </div>
+            )}
+
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <Button 
+                onClick={() => setCurrentTool('home')}
+                style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+              >
+                ← Back to Tools
+              </Button>
+            </div>
+          </div>
+        ) : currentTool === 'imageToPdf' ? (
+          // Image to PDF Tool (Existing functionality preserved)
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <h2 style={{ color: '#00bfff', fontSize: '28px', marginBottom: '8px' }}>Image to PDF</h2>
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                Convert images to PDF in seconds with full editing capabilities.
+              </p>
+            </div>
+
+            {pages.length === 0 ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '400px',
+                color: '#00bfff',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '64px', marginBottom: '24px' }}>📄</div>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '24px' }}>Convert Images to PDF</h3>
+                <p style={{ margin: '0 0 32px 0', fontSize: '16px', opacity: 0.8, maxWidth: '500px' }}>
+                  Upload images to create a PDF document. You can rotate, crop, reorder, and manipulate pages with full control.
+                </p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '16px 32px',
                     color: 'white',
-                    padding: '2px 5px',
-                    fontSize: '12px',
-                    width: '120px'
-                  }}
-                />
-                <button
-                  onClick={finishEditingTab}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#4CAF50',
-                    fontSize: '10px'
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '16px',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
                   }}
                 >
-                  ✓
-                </button>
-                <button
-                  onClick={cancelEditingTab}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#f44336',
-                    fontSize: '10px'
-                  }}
-                >
-                  ✕
+                  📁 Upload Images
                 </button>
               </div>
             ) : (
-              <>
-                <span
-                  onClick={() => switchToSession(session.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {session.name}
-                </span>
-                <button
-                  onClick={() => startEditingTab(session.id, session.name)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#888',
-                    cursor: 'pointer',
-                    fontSize: '10px'
-                  }}
-                  title="Edit tab name"
-                >
-                  ✏️
-                </button>
-                {sessions.length > 1 && (
-                  <button
-                    onClick={() => closeSession(session.id)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#888',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </>
+              <div>
+                {/* Toolbar */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))',
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ color: '#00bfff', fontSize: '14px' }}>
+                      📊 {pages.length} pages
+                    </span>
+                    <button
+                      onClick={exportToPDF}
+                      disabled={isCurrentSessionProcessing}
+                      style={{
+                        background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '8px 16px',
+                        color: 'white',
+                        cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '12px',
+                        opacity: isCurrentSessionProcessing ? 0.7 : 1
+                      }}
+                    >
+                      💾 Export PDF
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pages Grid */}
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '16px',
+                  alignItems: 'flex-start'
+                }}>
+                  {pages.map((page, index) => (
+                    <div
+                      key={page.id}
+                      style={{
+                        position: 'relative',
+                        width: '250px',
+                        border: '2px solid rgba(0, 255, 255, 0.3)',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.3), rgba(0, 40, 80, 0.2))',
+                        boxShadow: '0 0 20px rgba(0, 255, 255, 0.2)',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {/* Page Header */}
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(0, 40, 80, 0.9), rgba(0, 20, 40, 0.95))',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '8px 12px',
+                        borderBottom: '1px solid rgba(0, 255, 255, 0.2)'
+                      }}>
+                        <div style={{
+                          color: '#00bfff',
+                          fontWeight: 600,
+                          fontSize: '12px',
+                          maxWidth: '150px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {page.name}
+                        </div>
+                        <button
+                          onClick={() => deletePage(page.id)}
+                          style={{
+                            background: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      {/* Image Container */}
+                      <div style={{
+                        position: 'relative',
+                        width: '100%',
+                        paddingBottom: '141.4%',
+                        background: '#f5f5f5',
+                        overflow: 'hidden'
+                      }}>
+                        <img
+                          src={page.imageData}
+                          alt={page.name}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            transform: `rotate(${page.rotation}deg) ${zoomedPages.has(page.id) ? 'scale(1.2)' : 'scale(1)'}`,
+                            transition: 'transform 0.3s ease'
+                          }}
+                        />
+
+                        {/* Control Buttons */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          display: 'flex',
+                          gap: '4px'
+                        }}>
+                          <button
+                            onClick={() => rotatePage(page.id, 'left')}
+                            style={{
+                              background: 'rgba(0,0,0,0.7)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: 'white',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ↺
+                          </button>
+                          <button
+                            onClick={() => rotatePage(page.id, 'right')}
+                            style={{
+                              background: 'rgba(0,0,0,0.7)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: 'white',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ↻
+                          </button>
+                        </div>
+
+                        {/* Position Controls */}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '8px',
+                          left: '8px',
+                          display: 'flex',
+                          gap: '4px'
+                        }}>
+                          <button
+                            onClick={() => movePageUp(index)}
+                            disabled={index === 0}
+                            style={{
+                              background: index === 0 ? '#666' : 'rgba(0,0,0,0.7)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: 'white',
+                              cursor: index === 0 ? 'not-allowed' : 'pointer',
+                              padding: '4px',
+                              fontSize: '10px',
+                              opacity: index === 0 ? 0.5 : 1
+                            }}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            onClick={() => movePageDown(index)}
+                            disabled={index === pages.length - 1}
+                            style={{
+                              background: index === pages.length - 1 ? '#666' : 'rgba(0,0,0,0.7)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: 'white',
+                              cursor: index === pages.length - 1 ? 'not-allowed' : 'pointer',
+                              padding: '4px',
+                              fontSize: '10px',
+                              opacity: index === pages.length - 1 ? 0.5 : 1
+                            }}
+                          >
+                            ↓
+                          </button>
+                        </div>
+
+                        {/* Floating and Zoom Buttons */}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '8px',
+                          right: '8px',
+                          display: 'flex',
+                          gap: '4px'
+                        }}>
+                          <button
+                            onClick={() => toggleFloating(page.id)}
+                            style={{
+                              background: floatingPages[page.id]?.visible ? "#f44336" : "#2196F3",
+                              color: "white",
+                              border: "none",
+                              padding: "4px",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              fontSize: "12px"
+                            }}
+                          >
+                            🎈
+                          </button>
+                          <button
+                            onClick={() => toggleZoom(page.id)}
+                            style={{
+                              background: zoomedPages.has(page.id) ? "#FFEB3B" : "#9C27B0",
+                              color: zoomedPages.has(page.id) ? "#333" : "white",
+                              border: "none",
+                              padding: "4px",
+                              borderRadius: "4px",
+                              cursor: "pointer",
+                              fontSize: "10px"
+                            }}
+                          >
+                            🔍
+                          </button>
+                        </div>
+
+                        {/* Page Number Badge */}
+                        <div style={{
+                          position: "absolute",
+                          top: "8px",
+                          left: "8px",
+                          background: "#333",
+                          color: "white",
+                          borderRadius: "50%",
+                          width: "24px",
+                          height: "24px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          border: "2px solid white"
+                        }}>
+                          {index + 1}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-          </div>
-        ))}
-        <button
-          onClick={addNewSession}
-          style={{
-            background: '#333',
-            border: '1px solid #555',
-            color: '#4CAF50',
-            borderRadius: '3px',
-            padding: '6px 8px',
-            cursor: 'pointer',
-            fontSize: '12px'
-          }}
-        >
-          + Add
-        </button>
-      </div>
 
-      {/* Rearrange Options Modal - exact same as cropper */}
-      {showRearrangeOptions && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000
-        }}>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.95), rgba(0, 40, 80, 0.9))',
-            border: '2px solid rgba(0, 255, 255, 0.3)',
-            borderRadius: '16px',
-            padding: '32px',
-            maxWidth: '500px',
-            width: '90%'
-          }}>
-            <h3 style={{ color: '#00bfff', textAlign: 'center', marginBottom: '24px' }}>
-              Choose Rearrange Method
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <button
-                onClick={startArrowRearrange}
-                style={{
-                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '16px 24px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px'
-                }}
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <Button 
+                onClick={() => setCurrentTool('home')}
+                style={{ background: 'rgba(255, 255, 255, 0.1)' }}
               >
-                🔄 Rearrange with Arrow Buttons
-              </button>
-
-              <button
-                onClick={startInputRearrange}
-                style={{
-                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '16px 24px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px'
-                }}
-              >
-                ⌨️ Rearrange with Input Numbers
-              </button>
-
-              <button
-                onClick={() => setShowRearrangeOptions(false)}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: '12px',
-                  padding: '12px 24px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Cancel
-              </button>
+                ← Back to Tools
+              </Button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Input Rearrange Modal - exact same as cropper */}
-      {rearrangeInput !== '' && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000
-        }}>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.95), rgba(0, 40, 80, 0.9))',
-            border: '2px solid rgba(0, 255, 255, 0.3)',
-            borderRadius: '16px',
-            padding: '32px',
-            maxWidth: '600px',
-            width: '90%'
-          }}>
-            <h3 style={{ color: '#00bfff', textAlign: 'center', marginBottom: '16px' }}>
-              Rearrange Pages by Position
-            </h3>
-            <p style={{ color: 'rgba(255, 255, 255, 0.8)', textAlign: 'center', marginBottom: '24px', fontSize: '14px' }}>
-              Enter the new order using comma-separated numbers (1 to {pages.length}):
+        ) : (
+          // Other tools placeholder
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <h2 style={{ color: '#00bfff', marginBottom: '16px' }}>
+              {tools.find(t => t.pageName === currentTool)?.title || 'Tool'}
+            </h2>
+            <p style={{ color: 'rgba(255, 255, 255, 0.8)', marginBottom: '24px' }}>
+              {tools.find(t => t.pageName === currentTool)?.content || 'Coming soon...'}
             </p>
-
-            <input
-              type="text"
-              value={rearrangeInput}
-              onChange={(e) => setRearrangeInput(e.target.value)}
-              placeholder={`Example: ${pages.map((_, i) => i + 1).join(',')}`}
-              style={{
-                width: '100%',
-                background: 'rgba(255, 255, 255, 0.1)',
-                border: '1px solid rgba(0, 255, 255, 0.3)',
-                borderRadius: '8px',
-                padding: '12px',
-                color: '#00bfff',
-                fontSize: '14px',
-                marginBottom: '20px'
-              }}
-            />
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button
-                onClick={applyInputRearrange}
-                style={{
-                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '12px 24px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Apply Rearrangement
-              </button>
-              <button
-                onClick={() => setRearrangeInput('')}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: '8px',
-                  padding: '12px 24px',
-                  color: 'white',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-            </div>
+            <Button 
+              onClick={() => setCurrentTool('home')}
+              style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+            >
+              ← Back to Tools
+            </Button>
           </div>
-        </div>
-      )}
-
-      {/* Toolbar - same as cropper */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.8), rgba(0, 40, 80, 0.6))',
-        padding: '12px 24px',
-        borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {pages.length > 0 && (
-            <>
-              <span style={{ color: '#00bfff', fontSize: '14px' }}>
-                📊 {pages.length} pages
-              </span>
-              {selectedPages.size > 0 && (
-                <span style={{ color: '#4CAF50', fontSize: '14px' }}>
-                  ✓ {selectedPages.size} selected
-                </span>
-              )}
-              <button
-                onClick={selectAllPages}
-                style={{
-                  background: 'rgba(0, 255, 255, 0.2)',
-                  border: '1px solid rgba(0, 255, 255, 0.3)',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  color: '#00bfff',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                Select All
-              </button>
-              <button
-                onClick={clearSelection}
-                style={{
-                  background: 'rgba(0, 255, 255, 0.2)',
-                  border: '1px solid rgba(0, 255, 255, 0.3)',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  color: '#00bfff',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                Clear
-              </button>
-              <button
-                onClick={handleRearrangeClick}
-                style={{
-                  background: rearrangeMode ? 'linear-gradient(45deg, #4CAF50, #45a049)' : 'rgba(0, 255, 255, 0.2)',
-                  border: '1px solid rgba(0, 255, 255, 0.3)',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  color: rearrangeMode ? 'white' : '#00bfff',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: rearrangeMode ? 'bold' : 'normal'
-                }}
-              >
-                {rearrangeMode ? '✓ Rearrange ON' : '🔄 Rearrange'}
-              </button>
-              <button
-                onClick={reversePagesOrder}
-                style={{
-                  background: 'rgba(0, 255, 255, 0.2)',
-                  border: '1px solid rgba(0, 255, 255, 0.3)',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  color: '#00bfff',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                🔄 Reverse Order
-              </button>
-              <button
-                onClick={exportToPDF}
-                disabled={isCurrentSessionProcessing}
-                style={{
-                  background: 'linear-gradient(45deg, #2196F3, #1976D2)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '8px 16px',
-                  color: 'white',
-                  cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '12px',
-                  opacity: isCurrentSessionProcessing ? 0.7 : 1
-                }}
-              >
-                💾 Export PDF
-              </button>
-              <button
-                onClick={async () => {
-                  if (pages.length === 0) {
-                    alert('No pages to create presentation');
-                    return;
-                  }
-
-                  const jobId = addProcessingJob(activeSessionId, activeSession.name, 'presentation', pages.length);
-
-                  try {
-                    updateProcessingJob(jobId, { message: 'Creating presentation...' });
-
-                    const sortedPages = pages.sort((a, b) => a.order - b.order);
-                    
-                    // Create HTML presentation with proper image handling
-                    const presentationHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${activeSession.name} - Presentation</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            background: linear-gradient(135deg, #1e3c72, #2a5298); 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            overflow: hidden;
-        }
-        .presentation-container { 
-            width: 100vw; 
-            height: 100vh; 
-            position: relative; 
-        }
-        .slide { 
-            width: 100%; 
-            height: 100%; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            position: absolute;
-            top: 0;
-            left: 0;
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-        }
-        .slide.active { opacity: 1; }
-        .slide img { 
-            max-width: 95vw; 
-            max-height: 95vh; 
-            object-fit: contain; 
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        .controls { 
-            position: fixed; 
-            bottom: 30px; 
-            left: 50%; 
-            transform: translateX(-50%); 
-            z-index: 1000; 
-            display: flex; 
-            gap: 15px;
-            background: rgba(0,0,0,0.7);
-            padding: 15px 25px;
-            border-radius: 50px;
-            backdrop-filter: blur(10px);
-        }
-        .btn { 
-            background: linear-gradient(45deg, #667eea, #764ba2); 
-            color: white; 
-            border: none; 
-            padding: 12px 20px; 
-            border-radius: 25px; 
-            cursor: pointer; 
-            font-weight: bold;
-            transition: all 0.3s ease;
-            font-size: 14px;
-        }
-        .btn:hover { 
-            transform: translateY(-2px); 
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-        .slide-info { 
-            position: fixed; 
-            top: 30px; 
-            right: 30px; 
-            color: white; 
-            font-size: 18px; 
-            z-index: 1000;
-            background: rgba(0,0,0,0.7);
-            padding: 10px 20px;
-            border-radius: 25px;
-            backdrop-filter: blur(10px);
-        }
-        .slide-title {
-            position: fixed;
-            top: 30px;
-            left: 30px;
-            color: white;
-            font-size: 24px;
-            font-weight: bold;
-            z-index: 1000;
-            background: rgba(0,0,0,0.7);
-            padding: 15px 25px;
-            border-radius: 25px;
-            backdrop-filter: blur(10px);
-        }
-        .progress-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            transition: width 0.5s ease;
-            z-index: 1000;
-        }
-    </style>
-</head>
-<body>
-    <div class="presentation-container">
-        <div class="slide-title" id="slideTitle">${activeSession.name}</div>
-        <div class="slide-info" id="slideInfo">1 / ${sortedPages.length}</div>
-        <div class="progress-bar" id="progressBar" style="width: ${100/sortedPages.length}%"></div>
-        
-        ${sortedPages.map((page, index) => `
-        <div class="slide ${index === 0 ? 'active' : ''}" id="slide-${index}">
-            <img src="${page.imageData}" alt="${page.name}" style="transform: rotate(${page.rotation}deg);" />
-        </div>
-        `).join('')}
-        
-        <div class="controls">
-            <button class="btn" onclick="prevSlide()" id="prevBtn">⮜ Previous</button>
-            <button class="btn" onclick="togglePlay()" id="playBtn">▶ Auto Play</button>
-            <button class="btn" onclick="nextSlide()" id="nextBtn">Next ⮞</button>
-            <button class="btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
-        </div>
-    </div>
-
-    <script>
-        let currentSlide = 0;
-        let isPlaying = false;
-        let playInterval;
-        const totalSlides = ${sortedPages.length};
-        const slideNames = ${JSON.stringify(sortedPages.map(p => p.name))};
-
-        function showSlide(n) {
-            // Hide all slides
-            document.querySelectorAll('.slide').forEach(slide => {
-                slide.classList.remove('active');
-            });
-            
-            // Show current slide
-            document.getElementById('slide-' + n).classList.add('active');
-            
-            // Update info
-            document.getElementById('slideInfo').textContent = (n + 1) + ' / ' + totalSlides;
-            document.getElementById('progressBar').style.width = ((n + 1) / totalSlides * 100) + '%';
-            
-            // Update navigation buttons
-            document.getElementById('prevBtn').disabled = n === 0;
-            document.getElementById('nextBtn').disabled = n === totalSlides - 1;
-        }
-
-        function nextSlide() {
-            if (currentSlide < totalSlides - 1) {
-                currentSlide++;
-                showSlide(currentSlide);
-            }
-        }
-
-        function prevSlide() {
-            if (currentSlide > 0) {
-                currentSlide--;
-                showSlide(currentSlide);
-            }
-        }
-
-        function togglePlay() {
-            const playBtn = document.getElementById('playBtn');
-            if (isPlaying) {
-                clearInterval(playInterval);
-                playBtn.textContent = '▶ Auto Play';
-                isPlaying = false;
-            } else {
-                playInterval = setInterval(() => {
-                    if (currentSlide < totalSlides - 1) {
-                        nextSlide();
-                    } else {
-                        togglePlay(); // Stop at end
-                    }
-                }, 3000);
-                playBtn.textContent = '⏸ Stop';
-                isPlaying = true;
-            }
-        }
-
-        function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
-        }
-
-        // Keyboard navigation
-        document.addEventListener('keydown', (e) => {
-            switch(e.key) {
-                case 'ArrowRight':
-                case ' ':
-                    e.preventDefault();
-                    nextSlide();
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    prevSlide();
-                    break;
-                case 'f':
-                case 'F11':
-                    e.preventDefault();
-                    toggleFullscreen();
-                    break;
-                case 'p':
-                    e.preventDefault();
-                    togglePlay();
-                    break;
-                case 'Escape':
-                    if (document.fullscreenElement) {
-                        document.exitFullscreen();
-                    }
-                    break;
-                case 'Home':
-                    e.preventDefault();
-                    currentSlide = 0;
-                    showSlide(currentSlide);
-                    break;
-                case 'End':
-                    e.preventDefault();
-                    currentSlide = totalSlides - 1;
-                    showSlide(currentSlide);
-                    break;
-            }
-        });
-
-        // Touch/swipe support
-        let startX = 0;
-        let startY = 0;
-
-        document.addEventListener('touchstart', (e) => {
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
-        });
-
-        document.addEventListener('touchend', (e) => {
-            if (!startX || !startY) return;
-            
-            const endX = e.changedTouches[0].clientX;
-            const endY = e.changedTouches[0].clientY;
-            
-            const diffX = startX - endX;
-            const diffY = startY - endY;
-            
-            if (Math.abs(diffX) > Math.abs(diffY)) {
-                if (diffX > 50) nextSlide(); // Swipe left
-                if (diffX < -50) prevSlide(); // Swipe right
-            }
-            
-            startX = 0;
-            startY = 0;
-        });
-
-        // Initialize
-        showSlide(0);
-    </script>
-</body>
-</html>`;
-
-                    updateProcessingJob(jobId, { message: 'Generating presentation file...' });
-
-                    const blob = new Blob([presentationHTML], { type: 'text/html' });
-                    const url = URL.createObjectURL(blob);
-
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `${activeSession.name.replace(/\s+/g, '_')}_presentation.html`;
-                    link.click();
-
-                    URL.revokeObjectURL(url);
-                    completeProcessingJob(jobId, 'completed', 'Interactive presentation created successfully!');
-                  } catch (error) {
-                    console.error('Error creating presentation:', error);
-                    completeProcessingJob(jobId, 'error', 'Error creating presentation');
-                  }
-                }}
-                disabled={isCurrentSessionProcessing}
-                style={{
-                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '8px 16px',
-                  color: 'white',
-                  cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '12px',
-                  opacity: isCurrentSessionProcessing ? 0.7 : 1
-                }}
-              >
-                🎥 Create Presentation
-              </button>
-              <button
-                onClick={async () => {
-                  if (pages.length === 0) {
-                    alert('No pages to share');
-                    return;
-                  }
-
-                  const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
-
-                  try {
-                    updateProcessingJob(jobId, { message: 'Creating PDF for sharing...' });
-                    
-                    const pdfDoc = await PDFDocument.create();
-                    const sortedPages = pages.sort((a, b) => a.order - b.order);
-
-                    for (let i = 0; i < sortedPages.length; i++) {
-                      const page = sortedPages[i];
-                      updateProcessingJob(jobId, {
-                        progress: i,
-                        message: `Processing page ${i + 1}/${sortedPages.length} for sharing`
-                      });
-
-                      const canvas = document.createElement('canvas');
-                      const ctx = canvas.getContext('2d')!;
-
-                      canvas.width = page.crop.width;
-                      canvas.height = page.crop.height;
-
-                      const img = new Image();
-                      img.src = page.imageData;
-                      await new Promise((resolve) => { img.onload = resolve; });
-
-                      ctx.save();
-                      if (page.rotation !== 0) {
-                        const centerX = canvas.width / 2;
-                        const centerY = canvas.height / 2;
-                        ctx.translate(centerX, centerY);
-                        ctx.rotate((page.rotation * Math.PI) / 180);
-                        ctx.translate(-centerX, -centerY);
-                      }
-                      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                      ctx.restore();
-
-                      const imageBytes = canvas.toDataURL('image/png');
-                      const pngImage = await pdfDoc.embedPng(imageBytes);
-                      const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
-                      pdfPage.drawImage(pngImage, {
-                        x: 0,
-                        y: 0,
-                        width: canvas.width,
-                        height: canvas.height
-                      });
-                    }
-
-                    updateProcessingJob(jobId, { message: 'Preparing PDF for sharing...' });
-                    const pdfBytes = await pdfDoc.save();
-                    const filename = `${activeSession.name.replace(/\s+/g, '_')}.pdf`;
-                    const pdfFile = new File([pdfBytes], filename, { type: 'application/pdf' });
-
-                    // Always try to force the share dialog
-                    if (navigator.share) {
-                      try {
-                        // Create a file and force share dialog
-                        const shareData = {
-                          title: `${activeSession.name} - PDF Master`,
-                          text: `Check out my PDF with ${pages.length} pages created using PDF Master!`,
-                          files: [pdfFile]
-                        };
-                        
-                        // Force the share dialog to open
-                        await navigator.share(shareData);
-                        completeProcessingJob(jobId, 'completed', '📤 PDF shared successfully!');
-                      } catch (shareError: any) {
-                        if (shareError.name === 'AbortError') {
-                          completeProcessingJob(jobId, 'completed', 'Share cancelled by user');
-                        } else {
-                          // If native share fails, force it anyway by creating blob URL and trying again
-                          try {
-                            const url = URL.createObjectURL(pdfFile);
-                            const fallbackData = {
-                              title: `${activeSession.name} - PDF Master`,
-                              text: `Check out my PDF with ${pages.length} pages! Download: ${url}`,
-                              url: url
-                            };
-                            await navigator.share(fallbackData);
-                            URL.revokeObjectURL(url);
-                            completeProcessingJob(jobId, 'completed', '📤 PDF share dialog opened!');
-                          } catch (fallbackError: any) {
-                            // Force create temporary download link and trigger share
-                            const url = URL.createObjectURL(pdfFile);
-                            const tempLink = document.createElement('a');
-                            tempLink.href = url;
-                            tempLink.download = filename;
-                            document.body.appendChild(tempLink);
-                            
-                            // Try to share the link
-                            if (navigator.share) {
-                              try {
-                                await navigator.share({
-                                  title: `${activeSession.name} - PDF Master`,
-                                  text: `PDF ready for sharing: ${filename}`,
-                                  url: url
-                                });
-                                completeProcessingJob(jobId, 'completed', '📤 Share dialog opened with PDF!');
-                              } catch {
-                                // As last resort, trigger click and share
-                                tempLink.click();
-                                completeProcessingJob(jobId, 'completed', '📤 PDF ready - use your device share options!');
-                              }
-                            }
-                            
-                            document.body.removeChild(tempLink);
-                            URL.revokeObjectURL(url);
-                          }
-                        }
-                      }
-                    } else {
-                      // Browser doesn't support Web Share API - create download and suggest manual sharing
-                      const url = URL.createObjectURL(pdfFile);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = filename;
-                      link.click();
-                      URL.revokeObjectURL(url);
-                      completeProcessingJob(jobId, 'completed', '📄 PDF downloaded - you can now share it manually!');
-                    }
-                  } catch (error) {
-                    console.error('Error creating PDF for sharing:', error);
-                    completeProcessingJob(jobId, 'error', 'Error creating PDF for sharing');
-                  }
-                }}
-                disabled={isCurrentSessionProcessing}
-                style={{
-                  background: 'linear-gradient(45deg, #007bff, #0056b3)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '8px 16px',
-                  color: 'white',
-                  cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '12px',
-                  opacity: isCurrentSessionProcessing ? 0.7 : 1
-                }}
-              >
-                📤 Share PDF
-              </button>
-            </>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Global Processing Status Bar */}
@@ -1610,7 +1695,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           color: 'white',
           padding: '12px 24px',
           fontSize: '14px',
-          borderBottom: '1px solid rgba(0, 255, 255, 0.2)',
+          borderTop: '1px solid rgba(0, 255, 255, 0.2)',
           maxHeight: '150px',
           overflowY: 'auto'
         }}>
@@ -1629,8 +1714,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               </span>
             )}
           </div>
-          
-          {/* Jobs List */}
+
           {processingJobs.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {processingJobs.slice(0, 5).map(job => (
@@ -1666,461 +1750,10 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   </div>
                 </div>
               ))}
-              {processingJobs.length > 5 && (
-                <div style={{ fontSize: '11px', color: '#888', textAlign: 'center' }}>
-                  ... and {processingJobs.length - 5} more jobs
-                </div>
-              )}
             </div>
           )}
         </div>
       )}
-
-      {/* Main Content */}
-      <div style={{
-        flex: 1,
-        overflow: 'auto',
-        padding: '24px'
-      }}>
-        {pages.length === 0 ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            color: '#00bfff',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '64px', marginBottom: '24px' }}>📄</div>
-            <h2 style={{ margin: '0 0 16px 0', fontSize: '28px' }}>Welcome to PDF Master</h2>
-            <p style={{ margin: '0 0 32px 0', fontSize: '16px', opacity: 0.8, maxWidth: '500px' }}>
-              Upload images to create a PDF document or upload an existing PDF to edit its pages. 
-              You can rotate, crop, reorder, and manipulate pages with full control.
-            </p>
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '16px 32px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
-                }}
-              >
-                📁 Upload Images
-              </button>
-              <button
-                onClick={() => folderInputRef.current?.click()}
-                style={{
-                  background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '16px 32px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
-                }}
-              >
-                📁 Upload Folder
-              </button>
-              <button
-                onClick={() => pdfInputRef.current?.click()}
-                style={{
-                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '16px 32px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
-                }}
-              >
-                📄 Upload PDF
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '16px',
-            alignItems: 'flex-start'
-          }}>
-            {pages.map((page, index) => (
-              <div
-                key={page.id}
-                className="cropper"
-                style={{
-                  position: 'relative',
-                  width: '250px',
-                  cursor: rearrangeMode ? 'default' : 'pointer',
-                  border: selectedPages.has(page.id) ? '3px solid #4CAF50' : '2px solid rgba(0, 255, 255, 0.3)',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.3), rgba(0, 40, 80, 0.2))',
-                  boxShadow: '0 0 20px rgba(0, 255, 255, 0.2)',
-                  transition: 'all 0.3s ease',
-                  overflow: 'hidden'
-                }}
-                onClick={() => !rearrangeMode && togglePageSelection(page.id)}
-              >
-                {/* Serial Number Badge - same as cropper */}
-                <div style={{
-                  position: "absolute",
-                  top: "5px",
-                  left: "5px",
-                  background: rearrangeMode ? "#2196F3" : "#333",
-                  color: "white",
-                  borderRadius: "50%",
-                  width: "30px",
-                  height: "30px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 200,
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                  border: "2px solid white",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
-                }}>
-                  {index + 1}
-                </div>
-
-                {/* Header - same as cropper */}
-                <div className="cropper-header" style={{
-                  background: 'linear-gradient(135deg, rgba(0, 40, 80, 0.9), rgba(0, 20, 40, 0.95))',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '0 4px',
-                  borderRadius: '8px 8px 0 0',
-                  borderBottom: '1px solid rgba(0, 255, 255, 0.2)'
-                }}>
-                  <div className="cropper-filename" style={{
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden',
-                    maxWidth: '180px',
-                    color: '#00bfff',
-                    fontWeight: 600
-                  }}>
-                    {page.name}
-                  </div>
-                  <div className="cropper-body" style={{
-                    display: 'flex',
-                    gap: '6px',
-                    margin: '4px 0'
-                  }}>
-                    <button 
-                      className="circle-button" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deletePage(page.id);
-                      }}
-                      style={{
-                        background: '#f44336',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '20px',
-                        height: '20px',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      X
-                    </button>
-                  </div>
-                </div>
-
-                {/* Image container */}
-                <div style={{
-                  position: 'relative',
-                  width: '100%',
-                  paddingBottom: '141.4%',
-                  background: '#f5f5f5',
-                  overflow: 'hidden'
-                }}>
-                  <img
-                    src={page.imageData}
-                    alt={page.name}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      transform: `rotate(${page.rotation}deg) ${zoomedPages.has(page.id) ? 'scale(1.2)' : 'scale(1)'}`,
-                      transition: 'transform 0.3s ease',
-                      pointerEvents: rearrangeMode ? 'none' : 'auto',
-                      opacity: rearrangeMode ? 0.7 : 1
-                    }}
-                  />
-
-                  {/* ALL DIRECTIONAL Rearrange buttons - up, down, left, right */}
-                  {rearrangeMode && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gridTemplateRows: 'repeat(3, 1fr)',
-                      gap: '8px',
-                      zIndex: 300
-                    }}>
-                      {/* Top Row */}
-                      <div></div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          movePageUp(index);
-                        }}
-                        disabled={index === 0}
-                        style={{
-                          background: index === 0 ? "#666" : "linear-gradient(135deg, #2196F3, #1976D2)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: index === 0 ? "not-allowed" : "pointer",
-                          fontSize: "20px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                          opacity: index === 0 ? 0.5 : 1
-                        }}
-                        title="Move Up"
-                      >
-                        ↑
-                      </button>
-                      <div></div>
-
-                      {/* Middle Row */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          movePageLeft(index);
-                        }}
-                        disabled={index === 0}
-                        style={{
-                          background: index === 0 ? "#666" : "linear-gradient(135deg, #FF9800, #F57C00)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: index === 0 ? "not-allowed" : "pointer",
-                          fontSize: "20px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                          opacity: index === 0 ? 0.5 : 1
-                        }}
-                        title="Move Left"
-                      >
-                        ←
-                      </button>
-                      <div style={{
-                        background: "rgba(0,0,0,0.5)",
-                        borderRadius: "50%",
-                        width: "40px",
-                        height: "40px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "white",
-                        fontSize: "14px",
-                        fontWeight: "bold"
-                      }}>
-                        {index + 1}
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          movePageRight(index);
-                        }}
-                        disabled={index === pages.length - 1}
-                        style={{
-                          background: index === pages.length - 1 ? "#666" : "linear-gradient(135deg, #FF9800, #F57C00)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: index === pages.length - 1 ? "not-allowed" : "pointer",
-                          fontSize: "20px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                          opacity: index === pages.length - 1 ? 0.5 : 1
-                        }}
-                        title="Move Right"
-                      >
-                        →
-                      </button>
-
-                      {/* Bottom Row */}
-                      <div></div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          movePageDown(index);
-                        }}
-                        disabled={index === pages.length - 1}
-                        style={{
-                          background: index === pages.length - 1 ? "#666" : "linear-gradient(135deg, #2196F3, #1976D2)",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: "40px",
-                          height: "40px",
-                          cursor: index === pages.length - 1 ? "not-allowed" : "pointer",
-                          fontSize: "20px",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                          opacity: index === pages.length - 1 ? 0.5 : 1
-                        }}
-                        title="Move Down"
-                      >
-                        ↓
-                      </button>
-                      <div></div>
-                    </div>
-                  )}
-
-                  {/* Control buttons - same position as cropper */}
-                  {!rearrangeMode && (
-                    <>
-                      <div style={{
-                        position: 'absolute',
-                        top: '8px',
-                        right: '8px',
-                        display: 'flex',
-                        gap: '4px'
-                      }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            rotatePage(page.id, 'left');
-                          }}
-                          style={{
-                            background: 'rgba(0,0,0,0.7)',
-                            border: 'none',
-                            borderRadius: '4px',
-                            color: 'white',
-                            cursor: 'pointer',
-                            padding: '4px',
-                            fontSize: '12px'
-                          }}
-                        >
-                          ↺
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            rotatePage(page.id, 'right');
-                          }}
-                          style={{
-                            background: 'rgba(0,0,0,0.7)',
-                            border: 'none',
-                            borderRadius: '4px',
-                            color: 'white',
-                            cursor: 'pointer',
-                            padding: '4px',
-                            fontSize: '12px'
-                          }}
-                        >
-                          ↻
-                        </button>
-                      </div>
-
-                      {/* Floating and zoom buttons - EXACT same as cropper */}
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '8px',
-                        right: '8px',
-                        zIndex: 10,
-                        display: 'flex',
-                        gap: '5px'
-                      }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFloating(page.id);
-                          }}
-                          style={{
-                            background: floatingPages[page.id]?.visible ? "#f44336" : "#2196F3",
-                            color: "white",
-                            border: "none",
-                            padding: "6px 10px",
-                            borderRadius: "50%",
-                            cursor: "pointer",
-                            fontSize: "16px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: "40px",
-                            height: "40px",
-                            boxShadow: "0 3px 8px rgba(0,0,0,0.4)"
-                          }}
-                          title={floatingPages[page.id]?.visible ? "Close floating view" : "Open floating view"}
-                        >
-                          🎈
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleZoom(page.id);
-                          }}
-                          style={{
-                            background: zoomedPages.has(page.id) ? "#FFEB3B" : "#9C27B0",
-                            color: zoomedPages.has(page.id) ? "#333" : "white",
-                            border: "none",
-                            padding: "4px 8px",
-                            borderRadius: "50%",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: "28px",
-                            height: "28px",
-                            boxShadow: "0 2px 5px rgba(0,0,0,0.3)"
-                          }}
-                          title={zoomedPages.has(page.id) ? "Disable zoom" : "Enable zoom"}
-                        >
-                          🔍
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Hidden file inputs */}
       <input
@@ -2132,23 +1765,45 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         onChange={handleImageUpload}
       />
       <input
-        ref={folderInputRef}
+        ref={mergePdfInputRef}
         type="file"
         multiple
-        accept="image/*"
-        {...({ webkitdirectory: "" } as any)}
+        accept="application/pdf"
         style={{ display: 'none' }}
-        onChange={handleImageUpload}
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0) {
+            handleMergePdfUpload(files);
+          }
+        }}
       />
       <input
-        ref={pdfInputRef}
+        ref={organizePdfInputRef}
         type="file"
-        accept=".pdf"
+        multiple
+        accept="application/pdf,image/png,image/jpeg,image/jpg,image/tiff,image/heic,image/svg+xml"
         style={{ display: 'none' }}
-        onChange={handlePDFUpload}
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0) {
+            handleOrganizePdfUpload(files);
+          }
+        }}
+      />
+      <input
+        ref={resizePdfInputRef}
+        type="file"
+        accept="application/pdf"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length > 0) {
+            handleResizePdfUpload(files);
+          }
+        }}
       />
 
-      {/* Floating Pages Windows - EXACT same functionality as cropper */}
+      {/* Floating Pages Windows (preserved) */}
       {Object.entries(floatingPages).map(([pageId, data]) =>
         data.visible && (
           <div
@@ -2186,22 +1841,52 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 alignItems: 'center',
                 cursor: 'move'
               }}
-              onMouseDown={(e) => handleMouseDown(pageId, e)}
+              onMouseDown={(e) => {
+                const floatingEl = floatingRefs.current[pageId];
+                if (!floatingEl) return;
+
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const rect = floatingEl.getBoundingClientRect();
+                const offsetX = startX - rect.left;
+                const offsetY = startY - rect.top;
+
+                const handleMouseMove = (e: MouseEvent) => {
+                  const newX = e.clientX - offsetX;
+                  const newY = e.clientY - offsetY;
+
+                  setFloatingPages(prev => ({
+                    ...prev,
+                    [pageId]: {
+                      ...prev[pageId],
+                      position: { x: Math.max(0, newX), y: Math.max(0, newY) }
+                    }
+                  }));
+                };
+
+                const handleMouseUp = () => {
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                };
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+              }}
             >
               <span style={{ fontSize: '14px', fontWeight: 'bold' }}>
                 Floating Page {pages.findIndex(p => p.id === pageId) + 1}
               </span>
               <button
-                onClick={() => closeFloatingPage(pageId)}
+                onClick={() => setFloatingPages(prev => ({
+                  ...prev,
+                  [pageId]: { ...prev[pageId], visible: false }
+                }))}
                 style={{
                   background: 'transparent',
                   border: 'none',
                   color: 'white',
                   cursor: 'pointer',
-                  fontSize: '16px',
-                  padding: '0',
-                  width: '20px',
-                  height: '20px'
+                  fontSize: '16px'
                 }}
               >
                 ×
