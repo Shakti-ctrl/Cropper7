@@ -5,6 +5,12 @@ import * as pdfjs from 'pdfjs-dist';
 // Set up PDF.js worker - use local worker to avoid CDN issues
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
 
+interface SplitLine {
+  id: string;
+  points: { x: number; y: number }[];
+  isDrawing: boolean;
+}
+
 interface PDFPage {
   id: string;
   name: string;
@@ -20,6 +26,11 @@ interface PDFPage {
   order: number;
   width: number;
   height: number;
+  splitLines?: SplitLine[];
+  originalImageData?: string;
+  isOriginal?: boolean;
+  parentPageId?: string;
+  splitIndex?: number;
 }
 
 interface PDFSession {
@@ -69,6 +80,16 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [pages, setPages] = useState<PDFPage[]>(activeSession.pages);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   
+  // Image splitting functionality
+  const [splitMode, setSplitMode] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
+  const [applyToAll, setApplyToAll] = useState(false);
+  const [editHistory, setEditHistory] = useState<PDFPage[][]>([]);
+  const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
+  const [drawingPageId, setDrawingPageId] = useState<string | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentSplitLine, setCurrentSplitLine] = useState<{ x: number; y: number }[]>([]);
+  
   // Check if current session has any processing jobs
   const currentSessionJobs = processingJobs.filter(job => job.sessionId === activeSessionId);
   const isCurrentSessionProcessing = currentSessionJobs.some(job => job.status === 'processing');
@@ -87,9 +108,376 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const floatingRefs = useRef<{[key: string]: HTMLDivElement}>({});
+  const canvasRefs = useRef<{[key: string]: HTMLCanvasElement}>({});
 
   // Session management functions - exact same as cropper
   const generateSessionId = () => `pdf_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  // Image splitting functions
+  const saveToHistory = () => {
+    const newHistory = editHistory.slice(0, currentHistoryIndex + 1);
+    newHistory.push([...pages]);
+    setEditHistory(newHistory);
+    setCurrentHistoryIndex(newHistory.length - 1);
+  };
+  
+  const undo = () => {
+    if (currentHistoryIndex > 0) {
+      const previousState = editHistory[currentHistoryIndex - 1];
+      setPages([...previousState]);
+      setCurrentHistoryIndex(currentHistoryIndex - 1);
+    }
+  };
+  
+  const resetPageToOriginal = (pageId: string) => {
+    setPages(prev => prev.map(page => {
+      if (page.id === pageId && page.originalImageData) {
+        return {
+          ...page,
+          imageData: page.originalImageData,
+          splitLines: [],
+          isOriginal: true
+        };
+      }
+      return page;
+    }));
+  };
+  
+  const splitImageByLines = async (page: PDFPage): Promise<PDFPage[]> => {
+    if (!page.splitLines || page.splitLines.length === 0) {
+      return [page];
+    }
+    
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        // Create a canvas to draw the original image
+        const sourceCanvas = document.createElement('canvas');
+        const sourceCtx = sourceCanvas.getContext('2d')!;
+        
+        // Set canvas to actual image dimensions
+        sourceCanvas.width = img.naturalWidth || img.width;
+        sourceCanvas.height = img.naturalHeight || img.height;
+        sourceCtx.drawImage(img, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        
+        const splitPages: PDFPage[] = [];
+        
+        // Get the canvas element for this page to understand scaling
+        const displayCanvas = canvasRefs.current[page.id];
+        const scaleX = displayCanvas ? sourceCanvas.width / displayCanvas.width : 1;
+        const scaleY = displayCanvas ? sourceCanvas.height / displayCanvas.height : 1;
+        
+        // Sort split lines by Y coordinate and scale coordinates
+        const sortedLines = [...(page.splitLines || [])].map(line => ({
+          ...line,
+          points: line.points.map(p => ({
+            x: p.x * scaleX,
+            y: p.y * scaleY
+          }))
+        })).sort((a, b) => {
+          const avgYA = a.points.reduce((sum, p) => sum + p.y, 0) / a.points.length;
+          const avgYB = b.points.reduce((sum, p) => sum + p.y, 0) / b.points.length;
+          return avgYA - avgYB;
+        });
+        
+        let currentY = 0;
+        
+        // Create segments between split lines
+        for (let i = 0; i <= sortedLines.length; i++) {
+          const nextY = i < sortedLines.length 
+            ? Math.min(...sortedLines[i].points.map(p => p.y))
+            : sourceCanvas.height;
+          
+          const segmentHeight = Math.max(1, Math.floor(nextY - currentY));
+          
+          if (segmentHeight > 5) { // Only create segment if meaningful height
+            const segmentCanvas = document.createElement('canvas');
+            const segmentCtx = segmentCanvas.getContext('2d')!;
+            
+            segmentCanvas.width = sourceCanvas.width;
+            segmentCanvas.height = segmentHeight;
+            
+            // Copy the segment from source canvas with proper clipping
+            segmentCtx.drawImage(
+              sourceCanvas, 
+              0, Math.floor(currentY), sourceCanvas.width, segmentHeight,
+              0, 0, sourceCanvas.width, segmentHeight
+            );
+            
+            const segmentImageData = segmentCanvas.toDataURL('image/png', 0.9);
+            
+            const newPage: PDFPage = {
+              ...page,
+              id: `${page.id}_split_${i}`,
+              name: `${page.name}_part_${i + 1}`,
+              imageData: segmentImageData,
+              parentPageId: page.id,
+              splitIndex: i,
+              order: page.order + (i * 0.001), // Smaller increment for better ordering
+              width: sourceCanvas.width,
+              height: segmentHeight,
+              crop: { x: 0, y: 0, width: sourceCanvas.width, height: segmentHeight },
+              splitLines: undefined, // Remove split lines from segments
+              isOriginal: false
+            };
+            
+            splitPages.push(newPage);
+          }
+          
+          currentY = nextY + 2; // Small gap to avoid including split line
+        }
+        
+        resolve(splitPages.length > 0 ? splitPages : [page]);
+      };
+      img.onerror = () => {
+        console.error('Failed to load image for splitting');
+        resolve([page]);
+      };
+      img.src = page.imageData;
+    });
+  };
+  
+  const applySplitsToPage = async (pageId: string) => {
+    saveToHistory();
+    const page = pages.find(p => p.id === pageId);
+    if (!page) return;
+    
+    const splitPages = await splitImageByLines(page);
+    
+    // Only proceed if we actually got split pages
+    if (splitPages.length > 1 || (splitPages.length === 1 && splitPages[0].id !== page.id)) {
+      setPages(prev => {
+        // Remove the original page and add all split parts
+        const otherPages = prev.filter(p => p.id !== pageId);
+        const updatedPages = [...otherPages, ...splitPages];
+        
+        // Re-index pages to maintain proper order
+        return updatedPages
+          .sort((a, b) => a.order - b.order)
+          .map((p, index) => ({ ...p, order: index }));
+      });
+    }
+  };
+  
+  const applySplitsToAllPages = async () => {
+    if (!applyToAll) return;
+    
+    saveToHistory();
+    const allSplitPages: PDFPage[] = [];
+    
+    for (const page of pages) {
+      if (page.splitLines && page.splitLines.length > 0) {
+        const splitPages = await splitImageByLines(page);
+        allSplitPages.push(...splitPages);
+      } else {
+        allSplitPages.push(page);
+      }
+    }
+    
+    setPages(allSplitPages.sort((a, b) => a.order - b.order));
+  };
+  
+  const startDrawingSplitLine = (pageId: string, event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!splitMode) return;
+    
+    const canvas = canvasRefs.current[pageId];
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    setDrawingPageId(pageId);
+    setIsDrawing(true);
+    setCurrentSplitLine([{ x, y }]);
+  };
+  
+  const continueDrawingSplitLine = (pageId: string, event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || drawingPageId !== pageId) return;
+    
+    const canvas = canvasRefs.current[pageId];
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    setCurrentSplitLine(prev => [...prev, { x, y }]);
+  };
+  
+  const finishDrawingSplitLine = () => {
+    if (!isDrawing || !drawingPageId || currentSplitLine.length < 2) {
+      setIsDrawing(false);
+      setDrawingPageId(null);
+      setCurrentSplitLine([]);
+      return;
+    }
+    
+    const splitLineId = `split_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newSplitLine: SplitLine = {
+      id: splitLineId,
+      points: [...currentSplitLine],
+      isDrawing: false
+    };
+    
+    setPages(prev => prev.map(page => {
+      if (page.id === drawingPageId) {
+        // Store original image data if not already stored
+        const originalImageData = page.originalImageData || page.imageData;
+        return {
+          ...page,
+          originalImageData,
+          splitLines: [...(page.splitLines || []), newSplitLine],
+          isOriginal: false
+        };
+      }
+      return page;
+    }));
+    
+    setIsDrawing(false);
+    setDrawingPageId(null);
+    setCurrentSplitLine([]);
+  };
+  
+  const deleteSplitLine = (pageId: string, lineId: string) => {
+    setPages(prev => prev.map(page => {
+      if (page.id === pageId && page.splitLines) {
+        const newSplitLines = page.splitLines.filter(line => line.id !== lineId);
+        return {
+          ...page,
+          splitLines: newSplitLines,
+          isOriginal: newSplitLines.length === 0
+        };
+      }
+      return page;
+    }));
+  };
+  
+  const drawSplitLinesOnCanvas = useCallback((canvas: HTMLCanvasElement, page: PDFPage) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Clear canvas but keep it transparent
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Save current state
+    ctx.save();
+    
+    // Draw existing split lines - ALWAYS visible with better visibility
+    if (page.splitLines && page.splitLines.length > 0) {
+      page.splitLines.forEach((line, lineIndex) => {
+        if (line.points && line.points.length > 1) {
+          // Draw line with gradient for better visibility
+          const gradient = ctx.createLinearGradient(
+            line.points[0].x, line.points[0].y, 
+            line.points[line.points.length - 1].x, line.points[line.points.length - 1].y
+          );
+          gradient.addColorStop(0, '#ff0000');
+          gradient.addColorStop(1, '#cc0000');
+          
+          ctx.strokeStyle = gradient;
+          ctx.lineWidth = 6; // Increased line width for better visibility
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.shadowColor = 'rgba(255, 0, 0, 0.8)';
+          ctx.shadowBlur = 4;
+          
+          ctx.beginPath();
+          ctx.moveTo(line.points[0].x, line.points[0].y);
+          for (let i = 1; i < line.points.length; i++) {
+            ctx.lineTo(line.points[i].x, line.points[i].y);
+          }
+          ctx.stroke();
+          
+          // Reset shadow
+          ctx.shadowBlur = 0;
+          ctx.shadowColor = 'transparent';
+          
+          // Add numbered cut marks at start and end
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#ff0000';
+          ctx.lineWidth = 2;
+          
+          // Start point
+          ctx.beginPath();
+          ctx.arc(line.points[0].x, line.points[0].y, 8, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+          
+          // End point
+          ctx.beginPath();
+          ctx.arc(line.points[line.points.length - 1].x, line.points[line.points.length - 1].y, 8, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Line number label with better visibility
+          const midIndex = Math.floor(line.points.length / 2);
+          const midPoint = line.points[midIndex];
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#ff0000';
+          ctx.lineWidth = 1;
+          ctx.font = 'bold 14px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          // Background circle for number
+          ctx.beginPath();
+          ctx.arc(midPoint.x, midPoint.y - 12, 10, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Number text
+          ctx.fillStyle = '#ff0000';
+          ctx.fillText((lineIndex + 1).toString(), midPoint.x, midPoint.y - 12);
+          
+          // Draw horizontal line across entire width for clearer splitting
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(0, midPoint.y);
+          ctx.lineTo(canvas.width, midPoint.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+    }
+    
+    // Draw current line being drawn with animation effect
+    if (isDrawing && drawingPageId === page.id && currentSplitLine.length > 1) {
+      ctx.strokeStyle = '#ff6666';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([8, 4]);
+      ctx.shadowColor = 'rgba(255, 102, 102, 0.6)';
+      ctx.shadowBlur = 3;
+      
+      ctx.beginPath();
+      ctx.moveTo(currentSplitLine[0].x, currentSplitLine[0].y);
+      for (let i = 1; i < currentSplitLine.length; i++) {
+        ctx.lineTo(currentSplitLine[i].x, currentSplitLine[i].y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Draw preview horizontal line for current drawing
+      if (currentSplitLine.length > 0) {
+        const avgY = currentSplitLine.reduce((sum, p) => sum + p.y, 0) / currentSplitLine.length;
+        ctx.strokeStyle = 'rgba(255, 102, 102, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(0, avgY);
+        ctx.lineTo(canvas.width, avgY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    
+    // Restore state
+    ctx.restore();
+  }, [isDrawing, drawingPageId, currentSplitLine]);
 
   const saveCurrentSession = useCallback(() => {
     if (!activeSession) return;
@@ -103,7 +491,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     } catch (error) {
       console.error('Error saving session:', error);
     }
-  }, [activeSessionId, pages, activeSession]);
+  }, [activeSessionId, activeSession]); // Remove 'pages' from dependencies
 
   const switchToSession = (sessionId: string) => {
     saveCurrentSession();
@@ -206,7 +594,25 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     if (pages.length > 0) {
       saveCurrentSession();
     }
-  }, [pages, saveCurrentSession]);
+  }, [pages.length, activeSessionId]); // Use pages.length instead of pages, and remove saveCurrentSession
+  
+  // Initialize history when pages change
+  useEffect(() => {
+    if (editHistory.length === 0 && pages.length > 0) {
+      setEditHistory([pages]);
+      setCurrentHistoryIndex(0);
+    }
+  }, [pages, editHistory.length]);
+  
+  // Always redraw split lines for pages that have them
+  useEffect(() => {
+    pages.forEach(page => {
+      const canvas = canvasRefs.current[page.id];
+      if (canvas && ((page.splitLines && page.splitLines.length > 0) || (isDrawing && drawingPageId === page.id))) {
+        drawSplitLinesOnCanvas(canvas, page);
+      }
+    });
+  }, [pages, isDrawing, drawingPageId, currentSplitLine, drawSplitLinesOnCanvas]);
 
   // Convert image file to PDFPage - same as cropper logic
   const imageToPage = async (file: File, order: number): Promise<PDFPage | null> => {
@@ -399,6 +805,115 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       }
       return page;
     }));
+  };
+
+  const toggleLandscapeMode = (pageId: string) => {
+    setPages(prev => prev.map(page => {
+      if (page.id === pageId) {
+        return new Promise<PDFPage>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d')!;
+            
+            const originalWidth = img.naturalWidth || img.width;
+            const originalHeight = img.naturalHeight || img.height;
+            const isCurrentlyLandscape = originalWidth > originalHeight;
+            
+            if (isCurrentlyLandscape) {
+              // Already landscape, make it portrait
+              canvas.width = Math.min(originalWidth, originalHeight);
+              canvas.height = Math.max(originalWidth, originalHeight);
+            } else {
+              // Currently portrait, make it landscape
+              canvas.width = Math.max(originalWidth, originalHeight);
+              canvas.height = Math.min(originalWidth, originalHeight);
+            }
+            
+            // Draw image to fit the new aspect ratio
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const scale = Math.min(canvas.width / originalWidth, canvas.height / originalHeight);
+            const scaledWidth = originalWidth * scale;
+            const scaledHeight = originalHeight * scale;
+            const x = (canvas.width - scaledWidth) / 2;
+            const y = (canvas.height - scaledHeight) / 2;
+            
+            ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+            
+            const newImageData = canvas.toDataURL('image/png', 0.9);
+            
+            resolve({
+              ...page,
+              imageData: newImageData,
+              width: canvas.width,
+              height: canvas.height,
+              crop: { x: 0, y: 0, width: canvas.width, height: canvas.height }
+            });
+          };
+          img.src = page.imageData;
+        });
+      }
+      return Promise.resolve(page);
+    }));
+    
+    // Handle the promise resolution
+    setPages(prev => {
+      Promise.all(prev.map(page => {
+        if (page.id === pageId) {
+          return new Promise<PDFPage>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d')!;
+              
+              const originalWidth = img.naturalWidth || img.width;
+              const originalHeight = img.naturalHeight || img.height;
+              const isCurrentlyLandscape = originalWidth > originalHeight;
+              
+              if (isCurrentlyLandscape) {
+                // Already landscape, make it portrait
+                canvas.width = Math.min(originalWidth, originalHeight);
+                canvas.height = Math.max(originalWidth, originalHeight);
+              } else {
+                // Currently portrait, make it landscape
+                canvas.width = Math.max(originalWidth, originalHeight);
+                canvas.height = Math.min(originalWidth, originalHeight);
+              }
+              
+              // Draw image to fit the new aspect ratio
+              ctx.fillStyle = 'white';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              
+              const scale = Math.min(canvas.width / originalWidth, canvas.height / originalHeight);
+              const scaledWidth = originalWidth * scale;
+              const scaledHeight = originalHeight * scale;
+              const x = (canvas.width - scaledWidth) / 2;
+              const y = (canvas.height - scaledHeight) / 2;
+              
+              ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+              
+              const newImageData = canvas.toDataURL('image/png', 0.9);
+              
+              resolve({
+                ...page,
+                imageData: newImageData,
+                width: canvas.width,
+                height: canvas.height,
+                crop: { x: 0, y: 0, width: canvas.width, height: canvas.height }
+              });
+            };
+            img.src = page.imageData;
+          });
+        }
+        return Promise.resolve(page);
+      })).then(updatedPages => {
+        setPages(updatedPages);
+      });
+      
+      return prev; // Return current state while processing
+    });
   };
 
   const deletePage = (pageId: string) => {
@@ -1129,6 +1644,195 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 🔄 Reverse Order
               </button>
               <button
+                onClick={() => setSplitMode(!splitMode)}
+                style={{
+                  background: splitMode ? 'linear-gradient(45deg, #ff4444, #cc0000)' : 'rgba(255, 100, 100, 0.2)',
+                  border: '1px solid rgba(255, 100, 100, 0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: splitMode ? 'white' : '#ff6666',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: splitMode ? 'bold' : 'normal'
+                }}
+              >
+                {splitMode ? '✂️ Split ON' : '✂️ Split Images'}
+              </button>
+              <button
+                onClick={async () => {
+                  setPreviewMode(!previewMode);
+                  if (!previewMode && pages.length > 0) {
+                    // Generate preview with actual split images
+                    const previewWindow = window.open('', '_blank', 'width=800,height=900,scrollbars=yes');
+                    if (previewWindow) {
+                      previewWindow.document.write(`
+                        <div style="padding: 20px; text-align: center; font-family: Arial;">
+                          <h2>🔄 Generating PDF Preview...</h2>
+                          <p>Processing split images...</p>
+                        </div>
+                      `);
+                      
+                      // Process all pages and generate splits
+                      const finalPages: PDFPage[] = [];
+                      for (const page of pages) {
+                        if (page.splitLines && page.splitLines.length > 0) {
+                          const splitPages = await splitImageByLines(page);
+                          finalPages.push(...splitPages);
+                        } else {
+                          finalPages.push(page);
+                        }
+                      }
+                      
+                      const sortedPages = finalPages.sort((a, b) => a.order - b.order);
+                      
+                      const previewHTML = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                          <title>PDF Preview - ${activeSession.name}</title>
+                          <style>
+                            body { 
+                              margin: 0; 
+                              padding: 20px; 
+                              background: #f0f0f0; 
+                              font-family: Arial, sans-serif;
+                            }
+                            .pdf-preview {
+                              max-width: 600px;
+                              margin: 0 auto;
+                              background: white;
+                              box-shadow: 0 0 20px rgba(0,0,0,0.2);
+                              border-radius: 8px;
+                              overflow: hidden;
+                            }
+                            .pdf-header {
+                              background: linear-gradient(135deg, #667eea, #764ba2);
+                              color: white;
+                              padding: 15px 20px;
+                              text-align: center;
+                            }
+                            .pdf-page {
+                              border-bottom: 2px solid #eee;
+                              padding: 20px;
+                              text-align: center;
+                              position: relative;
+                            }
+                            .pdf-page:last-child {
+                              border-bottom: none;
+                            }
+                            .page-number {
+                              position: absolute;
+                              top: 10px;
+                              right: 15px;
+                              background: rgba(0,0,0,0.1);
+                              padding: 4px 8px;
+                              border-radius: 4px;
+                              font-size: 12px;
+                              color: #666;
+                            }
+                            .page-image {
+                              max-width: 100%;
+                              max-height: 600px;
+                              object-fit: contain;
+                              border: 1px solid #ddd;
+                              border-radius: 4px;
+                            }
+                            .split-indicator {
+                              background: rgba(76, 175, 80, 0.1);
+                              border: 2px solid #4CAF50;
+                              border-radius: 4px;
+                              padding: 5px 10px;
+                              margin: 10px 0;
+                              font-size: 11px;
+                              color: #2E7D32;
+                              display: inline-block;
+                            }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="pdf-preview">
+                            <div class="pdf-header">
+                              <h2>📄 Final PDF Preview: ${activeSession.name}</h2>
+                              <p>Total Pages: ${sortedPages.length} (Including Split Parts)</p>
+                            </div>
+                            ${sortedPages.map((page, index) => `
+                              <div class="pdf-page">
+                                <div class="page-number">Page ${index + 1}</div>
+                                <h4>${page.name}</h4>
+                                ${page.parentPageId ? 
+                                  `<div class="split-indicator">✂️ Split Part ${(page.splitIndex || 0) + 1} from original image</div>` : 
+                                  ''
+                                }
+                                <img 
+                                  src="${page.imageData}" 
+                                  alt="${page.name}" 
+                                  class="page-image"
+                                  style="transform: rotate(${page.rotation}deg);"
+                                />
+                              </div>
+                            `).join('')}
+                          </div>
+                          <div style="text-align: center; padding: 20px; color: #666;">
+                            <p>This is how your PDF will look with all split images included.</p>
+                            <p>You can reorder pages by dragging them in the main interface.</p>
+                          </div>
+                        </body>
+                        </html>
+                      `;
+                      previewWindow.document.write(previewHTML);
+                      previewWindow.document.close();
+                    }
+                  }
+                }}
+                style={{
+                  background: previewMode ? 'linear-gradient(45deg, #4CAF50, #45a049)' : 'rgba(76, 175, 80, 0.2)',
+                  border: '1px solid rgba(76, 175, 80, 0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: previewMode ? 'white' : '#4CAF50',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: previewMode ? 'bold' : 'normal'
+                }}
+              >
+                {previewMode ? '👁️ Preview ON' : '👁️ Preview PDF'}
+              </button>
+              <button
+                onClick={undo}
+                disabled={currentHistoryIndex <= 0}
+                style={{
+                  background: currentHistoryIndex <= 0 ? '#666' : 'rgba(255, 193, 7, 0.2)',
+                  border: '1px solid rgba(255, 193, 7, 0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: currentHistoryIndex <= 0 ? '#999' : '#FFC107',
+                  cursor: currentHistoryIndex <= 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                  opacity: currentHistoryIndex <= 0 ? 0.5 : 1
+                }}
+              >
+                ↶ Undo
+              </button>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                color: '#00bfff',
+                fontSize: '12px',
+                cursor: 'pointer'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={applyToAll}
+                  onChange={(e) => setApplyToAll(e.target.checked)}
+                  style={{
+                    accentColor: '#00bfff',
+                    cursor: 'pointer'
+                  }}
+                />
+                Apply to All
+              </label>
+              <button
                 onClick={exportToPDF}
                 disabled={isCurrentSessionProcessing}
                 style={{
@@ -1452,6 +2156,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 🎥 Create Presentation
               </button>
+              {applyToAll && (
+                <button
+                  onClick={applySplitsToAllPages}
+                  style={{
+                    background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '12px'
+                  }}
+                >
+                  🔄 Apply Splits to All
+                </button>
+              )}
               <button
                 onClick={async () => {
                   if (pages.length === 0) {
@@ -1827,10 +2548,184 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       objectFit: 'contain',
                       transform: `rotate(${page.rotation}deg) ${zoomedPages.has(page.id) ? 'scale(1.2)' : 'scale(1)'}`,
                       transition: 'transform 0.3s ease',
-                      pointerEvents: rearrangeMode ? 'none' : 'auto',
+                      pointerEvents: rearrangeMode || splitMode ? 'none' : 'auto',
                       opacity: rearrangeMode ? 0.7 : 1
                     }}
                   />
+                  
+                  {/* Canvas for drawing split lines - always show if page has lines or in split mode */}
+                  {(splitMode || (page.splitLines && page.splitLines.length > 0)) && (
+                    <>
+                      <canvas
+                        ref={(el) => {
+                          if (el) {
+                            canvasRefs.current[page.id] = el;
+                            // Set canvas size to match container
+                            const container = el.parentElement;
+                            if (container) {
+                              el.width = container.offsetWidth;
+                              el.height = container.offsetHeight;
+                              // Immediately redraw existing lines after canvas setup
+                              setTimeout(() => drawSplitLinesOnCanvas(el, page), 0);
+                            }
+                          }
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          cursor: splitMode ? 'crosshair' : 'default',
+                          zIndex: 250,
+                          border: splitMode ? '2px dashed rgba(255, 0, 0, 0.5)' : 'none',
+                          background: splitMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                          pointerEvents: splitMode ? 'auto' : 'none'
+                        }}
+                        onMouseDown={splitMode ? (e) => startDrawingSplitLine(page.id, e) : undefined}
+                        onMouseMove={splitMode ? (e) => continueDrawingSplitLine(page.id, e) : undefined}
+                        onMouseUp={splitMode ? finishDrawingSplitLine : undefined}
+                        onMouseLeave={splitMode ? finishDrawingSplitLine : undefined}
+                      />
+                      {/* Drawing instructions overlay - only in split mode */}
+                      {splitMode && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '8px',
+                          right: '8px',
+                          background: 'rgba(255, 0, 0, 0.9)',
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '9px',
+                          fontWeight: 'bold',
+                          zIndex: 270,
+                          pointerEvents: 'none'
+                        }}>
+                          Click & Drag to Draw Split Line
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Split lines indicator */}
+                  {page.splitLines && page.splitLines.length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      left: '8px',
+                      background: 'rgba(255, 0, 0, 0.9)',
+                      color: 'white',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      zIndex: 260,
+                      border: '1px solid rgba(255, 255, 255, 0.3)'
+                    }}>
+                      ✂️ {page.splitLines.length} cut{page.splitLines.length > 1 ? 's' : ''} → {page.splitLines.length + 1} parts
+                    </div>
+                  )}
+                  
+                  {/* Parent indicator for split images */}
+                  {page.parentPageId && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      left: '8px',
+                      background: 'rgba(76, 175, 80, 0.9)',
+                      color: 'white',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      zIndex: 260,
+                      border: '1px solid rgba(255, 255, 255, 0.3)'
+                    }}>
+                      📄 Part {(page.splitIndex || 0) + 1}
+                    </div>
+                  )}
+                  
+                  {/* Reset to Original Button */}
+                  {!page.isOriginal && page.originalImageData && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetPageToOriginal(page.id);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: '40px',
+                        left: '8px',
+                        background: 'rgba(0, 255, 0, 0.8)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        color: 'white',
+                        cursor: 'pointer',
+                        padding: '4px 8px',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        zIndex: 260
+                      }}
+                      title="Reset to Original"
+                    >
+                      🔄 Original
+                    </button>
+                  )}
+                  
+                  {/* Split Management Buttons */}
+                  {page.splitLines && page.splitLines.length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '50px',
+                      left: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      zIndex: 260
+                    }}>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await applySplitsToPage(page.id);
+                        }}
+                        style={{
+                          background: 'rgba(76, 175, 80, 0.9)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          padding: '4px 8px',
+                          fontSize: '9px',
+                          fontWeight: 'bold'
+                        }}
+                        title="Split This Image into Separate Pages"
+                      >
+                        ✂️ Split Now
+                      </button>
+                      {page.splitLines.map((line) => (
+                        <button
+                          key={line.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSplitLine(page.id, line.id);
+                          }}
+                          style={{
+                            background: 'rgba(255, 0, 0, 0.9)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            padding: '2px 6px',
+                            fontSize: '8px'
+                          }}
+                          title="Delete Split Line"
+                        >
+                          ❌
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {/* ALL DIRECTIONAL Rearrange buttons - up, down, left, right */}
                   {rearrangeMode && (
@@ -2018,6 +2913,24 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           }}
                         >
                           ↻
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleLandscapeMode(page.id);
+                          }}
+                          style={{
+                            background: 'rgba(76, 175, 80, 0.8)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            fontSize: '11px'
+                          }}
+                          title="Toggle Landscape/Portrait Mode"
+                        >
+                          🖼️
                         </button>
                       </div>
 
