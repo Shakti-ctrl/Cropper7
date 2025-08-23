@@ -808,112 +808,56 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   };
 
   const toggleLandscapeMode = (pageId: string) => {
-    setPages(prev => prev.map(page => {
-      if (page.id === pageId) {
-        return new Promise<PDFPage>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d')!;
-            
-            const originalWidth = img.naturalWidth || img.width;
-            const originalHeight = img.naturalHeight || img.height;
-            const isCurrentlyLandscape = originalWidth > originalHeight;
-            
-            if (isCurrentlyLandscape) {
-              // Already landscape, make it portrait
-              canvas.width = Math.min(originalWidth, originalHeight);
-              canvas.height = Math.max(originalWidth, originalHeight);
-            } else {
-              // Currently portrait, make it landscape
-              canvas.width = Math.max(originalWidth, originalHeight);
-              canvas.height = Math.min(originalWidth, originalHeight);
-            }
-            
-            // Draw image to fit the new aspect ratio
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            const scale = Math.min(canvas.width / originalWidth, canvas.height / originalHeight);
-            const scaledWidth = originalWidth * scale;
-            const scaledHeight = originalHeight * scale;
-            const x = (canvas.width - scaledWidth) / 2;
-            const y = (canvas.height - scaledHeight) / 2;
-            
-            ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-            
-            const newImageData = canvas.toDataURL('image/png', 0.9);
-            
-            resolve({
-              ...page,
-              imageData: newImageData,
-              width: canvas.width,
-              height: canvas.height,
-              crop: { x: 0, y: 0, width: canvas.width, height: canvas.height }
-            });
-          };
-          img.src = page.imageData;
-        });
-      }
-      return Promise.resolve(page);
-    }));
+    const targetPage = pages.find(page => page.id === pageId);
+    if (!targetPage) return;
     
-    // Handle the promise resolution
-    setPages(prev => {
-      Promise.all(prev.map(page => {
-        if (page.id === pageId) {
-          return new Promise<PDFPage>((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement('canvas');
-              const ctx = canvas.getContext('2d')!;
-              
-              const originalWidth = img.naturalWidth || img.width;
-              const originalHeight = img.naturalHeight || img.height;
-              const isCurrentlyLandscape = originalWidth > originalHeight;
-              
-              if (isCurrentlyLandscape) {
-                // Already landscape, make it portrait
-                canvas.width = Math.min(originalWidth, originalHeight);
-                canvas.height = Math.max(originalWidth, originalHeight);
-              } else {
-                // Currently portrait, make it landscape
-                canvas.width = Math.max(originalWidth, originalHeight);
-                canvas.height = Math.min(originalWidth, originalHeight);
-              }
-              
-              // Draw image to fit the new aspect ratio
-              ctx.fillStyle = 'white';
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              
-              const scale = Math.min(canvas.width / originalWidth, canvas.height / originalHeight);
-              const scaledWidth = originalWidth * scale;
-              const scaledHeight = originalHeight * scale;
-              const x = (canvas.width - scaledWidth) / 2;
-              const y = (canvas.height - scaledHeight) / 2;
-              
-              ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-              
-              const newImageData = canvas.toDataURL('image/png', 0.9);
-              
-              resolve({
-                ...page,
-                imageData: newImageData,
-                width: canvas.width,
-                height: canvas.height,
-                crop: { x: 0, y: 0, width: canvas.width, height: canvas.height }
-              });
-            };
-            img.src = page.imageData;
-          });
-        }
-        return Promise.resolve(page);
-      })).then(updatedPages => {
-        setPages(updatedPages);
-      });
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
       
-      return prev; // Return current state while processing
-    });
+      const originalWidth = img.naturalWidth || img.width;
+      const originalHeight = img.naturalHeight || img.height;
+      const isCurrentlyLandscape = originalWidth > originalHeight;
+      
+      if (isCurrentlyLandscape) {
+        // Already landscape, make it portrait
+        canvas.width = Math.min(originalWidth, originalHeight);
+        canvas.height = Math.max(originalWidth, originalHeight);
+      } else {
+        // Currently portrait, make it landscape
+        canvas.width = Math.max(originalWidth, originalHeight);
+        canvas.height = Math.min(originalWidth, originalHeight);
+      }
+      
+      // Draw image to fit the new aspect ratio
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const scale = Math.min(canvas.width / originalWidth, canvas.height / originalHeight);
+      const scaledWidth = originalWidth * scale;
+      const scaledHeight = originalHeight * scale;
+      const x = (canvas.width - scaledWidth) / 2;
+      const y = (canvas.height - scaledHeight) / 2;
+      
+      ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+      
+      const newImageData = canvas.toDataURL('image/png', 0.9);
+      
+      setPages(prev => prev.map(page => {
+        if (page.id === pageId) {
+          return {
+            ...page,
+            imageData: newImageData,
+            width: canvas.width,
+            height: canvas.height,
+            crop: { x: 0, y: 0, width: canvas.width, height: canvas.height }
+          };
+        }
+        return page;
+      }));
+    };
+    img.src = targetPage.imageData;
   };
 
   const deletePage = (pageId: string) => {
@@ -2242,7 +2186,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                         completeProcessingJob(jobId, 'completed', 'PDF shared successfully!');
                       } catch (shareError: any) {
                         if (shareError.name !== 'AbortError') {
-                          console.log('Share cancelled or failed:', shareError);
+                          // Share cancelled or failed - using fallback download
                           // Fallback to download
                           const url = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
                           const link = document.createElement('a');
