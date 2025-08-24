@@ -1848,8 +1848,10 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '12px'
+        flexWrap: 'nowrap',
+        gap: '12px',
+        overflowX: 'auto',
+        minHeight: '60px'
       }}>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {pages.length > 0 && (
@@ -3434,7 +3436,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              resize: 'both',
               minWidth: '300px',
               minHeight: '200px'
             }}
@@ -3455,21 +3456,49 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               <span style={{ fontSize: '14px', fontWeight: 'bold' }}>
                 Floating Page {pages.findIndex(p => p.id === pageId) + 1}
               </span>
-              <button
-                onClick={() => closeFloatingPage(pageId)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  padding: '0',
-                  width: '20px',
-                  height: '20px'
-                }}
-              >
-                ×
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFloatingPages(prev => ({
+                      ...prev,
+                      [pageId]: {
+                        ...prev[pageId],
+                        position: { x: 0, y: 0 },
+                        size: { width: window.innerWidth, height: window.innerHeight }
+                      }
+                    }));
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '0',
+                    width: '20px',
+                    height: '20px'
+                  }}
+                  title="Maximize to full screen"
+                >
+                  ⛶
+                </button>
+                <button
+                  onClick={() => closeFloatingPage(pageId)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    padding: '0',
+                    width: '20px',
+                    height: '20px'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             {/* Content */}
@@ -3566,6 +3595,58 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   🔍 {zoomedPages.has(pageId) ? "Zoom Out" : "Zoom In"}
                 </button>
               </div>
+            </div>
+
+            {/* Resize Arrow */}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '0',
+                right: '0',
+                width: '20px',
+                height: '20px',
+                background: '#28a745',
+                cursor: 'nw-resize',
+                borderTopLeftRadius: '4px',
+                zIndex: 1002
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startSize = data.size;
+
+                const handleMouseMove = (e: MouseEvent) => {
+                  const newWidth = Math.max(300, startSize.width + (e.clientX - startX));
+                  const newHeight = Math.max(200, startSize.height + (e.clientY - startY));
+                  
+                  setFloatingPages(prev => ({
+                    ...prev,
+                    [pageId]: {
+                      ...prev[pageId],
+                      size: { width: newWidth, height: newHeight }
+                    }
+                  }));
+                };
+
+                const handleMouseUp = () => {
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                };
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                bottom: '2px',
+                right: '2px',
+                width: '0',
+                height: '0',
+                borderLeft: '8px solid transparent',
+                borderBottom: '8px solid white'
+              }} />
             </div>
           </div>
         )
