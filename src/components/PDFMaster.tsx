@@ -148,7 +148,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [circleHistory, setCircleHistory] = useState<{[pageId: string]: CircleShape[]}[]>([]);
   const [shapeSelectorPosition, setShapeSelectorPosition] = useState({ x: 300, y: 150 });
   const [shapeSelectorSize, setShapeSelectorSize] = useState({ width: 450, height: 350 });
-  const [selectedShapeForResize, setSelectedShapeForResize] = useState<{pageId: string, shapeId: string} | null>(null);
+  const [selectedShapeForEdit, setSelectedShapeForEdit] = useState<{pageId: string, shapeId: string} | null>(null);
   const [availableShapes, setAvailableShapes] = useState([
     { type: 'circle', name: '⭕ Circle', icon: '⭕' },
     { type: 'rectangle', name: '⬜ Rectangle', icon: '⬜' },
@@ -364,67 +364,103 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         const scaleY = displayCanvas ? sourceCanvas.height / displayCanvas.height : 1;
         
         pageShapes.forEach((shape, shapeIndex) => {
-          const segmentCanvas = document.createElement('canvas');
-          const segmentCtx = segmentCanvas.getContext('2d')!;
+          // Create a temporary canvas for precise shape extraction
+          const tempCanvas = document.createElement('canvas');
+          const tempCtx = tempCanvas.getContext('2d')!;
+          tempCanvas.width = sourceCanvas.width;
+          tempCanvas.height = sourceCanvas.height;
           
-          // Calculate bounding box for shape
-          let minX = Math.min(...shape.points.map(p => p.x * scaleX));
-          let maxX = Math.max(...shape.points.map(p => p.x * scaleX));
-          let minY = Math.min(...shape.points.map(p => p.y * scaleY));
-          let maxY = Math.max(...shape.points.map(p => p.y * scaleY));
+          // Create exact clipping path based on shape type with precise scaling
+          tempCtx.save();
+          tempCtx.beginPath();
           
-          const segmentWidth = Math.ceil(maxX - minX);
-          const segmentHeight = Math.ceil(maxY - minY);
-          
-          if (segmentWidth > 0 && segmentHeight > 0) {
-            segmentCanvas.width = segmentWidth;
-            segmentCanvas.height = segmentHeight;
-            
-            // Create clipping path based on shape
-            segmentCtx.save();
-            segmentCtx.beginPath();
-            
-            if (shape.type === 'circle' && shape.center && shape.radius) {
-              segmentCtx.arc(
-                (shape.center.x * scaleX) - minX,
-                (shape.center.y * scaleY) - minY,
-                shape.radius * Math.min(scaleX, scaleY),
-                0,
-                2 * Math.PI
-              );
-            } else if (shape.type === 'rectangle') {
-              segmentCtx.rect(0, 0, segmentWidth, segmentHeight);
-            } else if (shape.type === 'ellipse') {
-              const centerX = segmentWidth / 2;
-              const centerY = segmentHeight / 2;
-              const radiusX = segmentWidth / 2;
-              const radiusY = segmentHeight / 2;
-              segmentCtx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-            } else {
-              // Custom or polygon shape
-              const scaledPoints = shape.points.map(p => ({
-                x: (p.x * scaleX) - minX,
-                y: (p.y * scaleY) - minY
-              }));
-              segmentCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+          if (shape.type === 'circle' && shape.center && shape.radius) {
+            tempCtx.arc(
+              shape.center.x * scaleX,
+              shape.center.y * scaleY,
+              shape.radius * Math.min(scaleX, scaleY),
+              0,
+              2 * Math.PI
+            );
+          } else if (shape.type === 'rectangle') {
+            const x1 = Math.min(shape.points[0].x, shape.points[1].x) * scaleX;
+            const y1 = Math.min(shape.points[0].y, shape.points[1].y) * scaleY;
+            const x2 = Math.max(shape.points[0].x, shape.points[1].x) * scaleX;
+            const y2 = Math.max(shape.points[0].y, shape.points[1].y) * scaleY;
+            tempCtx.rect(x1, y1, x2 - x1, y2 - y1);
+          } else if (shape.type === 'ellipse') {
+            const centerX = (shape.points[0].x + shape.points[1].x) / 2 * scaleX;
+            const centerY = (shape.points[0].y + shape.points[1].y) / 2 * scaleY;
+            const radiusX = Math.abs(shape.points[1].x - shape.points[0].x) / 2 * scaleX;
+            const radiusY = Math.abs(shape.points[1].y - shape.points[0].y) / 2 * scaleY;
+            tempCtx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+          } else if (shape.type === 'triangle') {
+            const x1 = (shape.points[0].x + shape.points[1].x) / 2 * scaleX;
+            const y1 = shape.points[0].y * scaleY;
+            const x2 = shape.points[0].x * scaleX;
+            const y2 = shape.points[1].y * scaleY;
+            const x3 = shape.points[1].x * scaleX;
+            const y3 = shape.points[1].y * scaleY;
+            tempCtx.moveTo(x1, y1);
+            tempCtx.lineTo(x2, y2);
+            tempCtx.lineTo(x3, y3);
+            tempCtx.closePath();
+          } else {
+            // Custom or polygon shape with exact point mapping
+            const scaledPoints = shape.points.map(p => ({
+              x: p.x * scaleX,
+              y: p.y * scaleY
+            }));
+            if (scaledPoints.length > 0) {
+              tempCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
               for (let i = 1; i < scaledPoints.length; i++) {
-                segmentCtx.lineTo(scaledPoints[i].x, scaledPoints[i].y);
+                tempCtx.lineTo(scaledPoints[i].x, scaledPoints[i].y);
               }
-              segmentCtx.closePath();
+              tempCtx.closePath();
             }
+          }
+          
+          tempCtx.clip();
+          
+          // Draw the original image with clipping applied
+          tempCtx.drawImage(sourceCanvas, 0, 0);
+          tempCtx.restore();
+          
+          // Get the precise bounding box of the clipped content
+          const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+          const pixels = imageData.data;
+          let minX = tempCanvas.width, maxX = 0, minY = tempCanvas.height, maxY = 0;
+          
+          // Find actual content bounds
+          for (let y = 0; y < tempCanvas.height; y++) {
+            for (let x = 0; x < tempCanvas.width; x++) {
+              const alpha = pixels[(y * tempCanvas.width + x) * 4 + 3];
+              if (alpha > 0) {
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+              }
+            }
+          }
+          
+          // Create final cropped image if content was found
+          if (minX < maxX && minY < maxY) {
+            const finalWidth = maxX - minX + 1;
+            const finalHeight = maxY - minY + 1;
+            const finalCanvas = document.createElement('canvas');
+            const finalCtx = finalCanvas.getContext('2d')!;
             
-            segmentCtx.clip();
+            finalCanvas.width = finalWidth;
+            finalCanvas.height = finalHeight;
             
-            // Draw the image portion
-            segmentCtx.drawImage(
-              sourceCanvas,
-              minX, minY, segmentWidth, segmentHeight,
-              0, 0, segmentWidth, segmentHeight
+            finalCtx.drawImage(
+              tempCanvas,
+              minX, minY, finalWidth, finalHeight,
+              0, 0, finalWidth, finalHeight
             );
             
-            segmentCtx.restore();
-            
-            const segmentImageData = segmentCanvas.toDataURL('image/png', 0.9);
+            const segmentImageData = finalCanvas.toDataURL('image/png', 0.95);
             
             const newPage: PDFPage = {
               ...page,
@@ -434,9 +470,9 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               parentPageId: page.id,
               splitIndex: shapeIndex,
               order: page.order + (shapeIndex * 0.001),
-              width: segmentWidth,
-              height: segmentHeight,
-              crop: { x: 0, y: 0, width: segmentWidth, height: segmentHeight },
+              width: finalWidth,
+              height: finalHeight,
+              crop: { x: 0, y: 0, width: finalWidth, height: finalHeight },
               isOriginal: false
             };
             
@@ -3492,15 +3528,64 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   borderRadius: '8px 8px 0 0',
                   borderBottom: '1px solid rgba(0, 255, 255, 0.2)'
                 }}>
-                  <div className="cropper-filename" style={{
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden',
-                    maxWidth: '180px',
-                    color: '#00bfff',
-                    fontWeight: 600
-                  }}>
-                    {page.name}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                    <div className="cropper-filename" style={{
+                      textOverflow: 'ellipsis',
+                      overflow: 'hidden',
+                      maxWidth: '120px',
+                      color: '#00bfff',
+                      fontWeight: 600
+                    }}>
+                      {page.name}
+                    </div>
+                    
+                    {/* Apply Shapes Button - moved to header */}
+                    {pageCircles[page.id] && pageCircles[page.id].length > 0 && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await applyCirclesToPage(page.id);
+                        }}
+                        style={{
+                          background: 'linear-gradient(45deg, #E91E63, #C2185B)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          fontWeight: 'bold'
+                        }}
+                        title="Apply Circle Shapes to Split Image"
+                      >
+                        ⭕ Apply
+                      </button>
+                    )}
+                    
+                    {/* Apply Splits Button - moved to header */}
+                    {page.splitLines && page.splitLines.length > 0 && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await applySplitsToPage(page.id);
+                        }}
+                        style={{
+                          background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          fontWeight: 'bold'
+                        }}
+                        title="Apply Split Lines to Split Image"
+                      >
+                        ✂️ Apply
+                      </button>
+                    )}
                   </div>
+                  
                   <div className="cropper-body" style={{
                     display: 'flex',
                     gap: '6px',
@@ -3586,20 +3671,91 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           pointerEvents: (splitMode || circlingMode) ? 'auto' : 'none'
                         }}
                         onMouseDown={(e) => {
-                          if (splitMode) startDrawingSplitLine(page.id, e);
-                          if (circlingMode) startDrawingShape(page.id, e);
+                          if (splitMode) {
+                            startDrawingSplitLine(page.id, e);
+                          } else if (circlingMode && selectedShape) {
+                            startDrawingShape(page.id, e);
+                          } else if (circlingMode && !selectedShape) {
+                            // Check if clicking on existing shape to select it
+                            const canvas = canvasRefs.current[page.id];
+                            if (canvas) {
+                              const rect = canvas.getBoundingClientRect();
+                              const x = e.clientX - rect.left;
+                              const y = e.clientY - rect.top;
+                              
+                              const shapes = pageCircles[page.id] || [];
+                              for (let i = shapes.length - 1; i >= 0; i--) {
+                                const shape = shapes[i];
+                                let isInside = false;
+                                
+                                if (shape.type === 'circle' && shape.center && shape.radius) {
+                                  const dist = Math.sqrt(Math.pow(x - shape.center.x, 2) + Math.pow(y - shape.center.y, 2));
+                                  isInside = dist <= shape.radius;
+                                } else if (shape.type === 'rectangle' && shape.points.length >= 2) {
+                                  const x1 = Math.min(shape.points[0].x, shape.points[1].x);
+                                  const y1 = Math.min(shape.points[0].y, shape.points[1].y);
+                                  const x2 = Math.max(shape.points[0].x, shape.points[1].x);
+                                  const y2 = Math.max(shape.points[0].y, shape.points[1].y);
+                                  isInside = x >= x1 && x <= x2 && y >= y1 && y <= y2;
+                                }
+                                
+                                if (isInside) {
+                                  setSelectedShapeForEdit({ pageId: page.id, shapeId: shape.id });
+                                  break;
+                                }
+                              }
+                            }
+                          }
                         }}
                         onMouseMove={(e) => {
                           if (splitMode) continueDrawingSplitLine(page.id, e);
-                          if (circlingMode) continueDrawingShape(page.id, e);
+                          if (circlingMode && selectedShape) continueDrawingShape(page.id, e);
                         }}
                         onMouseUp={() => {
                           if (splitMode) finishDrawingSplitLine();
-                          if (circlingMode) finishDrawingShape();
+                          if (circlingMode && selectedShape) finishDrawingShape();
                         }}
                         onMouseLeave={() => {
                           if (splitMode) finishDrawingSplitLine();
-                          if (circlingMode) finishDrawingShape();
+                          if (circlingMode && selectedShape) finishDrawingShape();
+                        }}
+                        onClick={(e) => {
+                          // Clear selection when clicking empty area
+                          if (circlingMode && !selectedShape) {
+                            const canvas = canvasRefs.current[page.id];
+                            if (canvas) {
+                              const rect = canvas.getBoundingClientRect();
+                              const x = e.clientX - rect.left;
+                              const y = e.clientY - rect.top;
+                              
+                              const shapes = pageCircles[page.id] || [];
+                              let clickedOnShape = false;
+                              
+                              for (const shape of shapes) {
+                                let isInside = false;
+                                
+                                if (shape.type === 'circle' && shape.center && shape.radius) {
+                                  const dist = Math.sqrt(Math.pow(x - shape.center.x, 2) + Math.pow(y - shape.center.y, 2));
+                                  isInside = dist <= shape.radius;
+                                } else if (shape.type === 'rectangle' && shape.points.length >= 2) {
+                                  const x1 = Math.min(shape.points[0].x, shape.points[1].x);
+                                  const y1 = Math.min(shape.points[0].y, shape.points[1].y);
+                                  const x2 = Math.max(shape.points[0].x, shape.points[1].x);
+                                  const y2 = Math.max(shape.points[0].y, shape.points[1].y);
+                                  isInside = x >= x1 && x <= x2 && y >= y1 && y <= y2;
+                                }
+                                
+                                if (isInside) {
+                                  clickedOnShape = true;
+                                  break;
+                                }
+                              }
+                              
+                              if (!clickedOnShape) {
+                                setSelectedShapeForEdit(null);
+                              }
+                            }
+                          }
                         }}
                       />
                       {/* Drawing instructions overlay - only in split or circle mode */}
@@ -3705,7 +3861,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     </button>
                   )}
                   
-                  {/* Split Management Buttons */}
+                  {/* Split Line Delete Buttons */}
                   {page.splitLines && page.splitLines.length > 0 && (
                     <div style={{
                       position: 'absolute',
@@ -3716,25 +3872,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                       gap: '4px',
                       zIndex: 260
                     }}>
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await applySplitsToPage(page.id);
-                        }}
-                        style={{
-                          background: 'rgba(76, 175, 80, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          color: 'white',
-                          cursor: 'pointer',
-                          padding: '4px 8px',
-                          fontSize: '9px',
-                          fontWeight: 'bold'
-                        }}
-                        title="Split This Image into Separate Pages"
-                      >
-                        ✂️ Split Now
-                      </button>
                       {page.splitLines.map((line) => (
                         <button
                           key={line.id}
@@ -3759,57 +3896,34 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     </div>
                   )}
 
-                  {/* Circle Shapes Management Buttons */}
-                  {pageCircles[page.id] && pageCircles[page.id].length > 0 && (
+                  {/* Delete Button for Selected Shape Only */}
+                  {selectedShapeForEdit && selectedShapeForEdit.pageId === page.id && (
                     <div style={{
                       position: 'absolute',
                       bottom: '90px',
                       left: '8px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px',
                       zIndex: 260
                     }}>
                       <button
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          await applyCirclesToPage(page.id);
+                          deleteCircleShape(page.id, selectedShapeForEdit.shapeId);
+                          setSelectedShapeForEdit(null);
                         }}
                         style={{
-                          background: 'rgba(233, 30, 99, 0.9)',
+                          background: 'rgba(244, 67, 54, 0.9)',
                           border: 'none',
                           borderRadius: '4px',
                           color: 'white',
                           cursor: 'pointer',
                           padding: '4px 8px',
-                          fontSize: '9px',
+                          fontSize: '10px',
                           fontWeight: 'bold'
                         }}
-                        title="Split This Image by Shapes"
+                        title="Delete Selected Shape"
                       >
-                        ⭕ Apply Shapes
+                        🗑️ Delete Shape
                       </button>
-                      {pageCircles[page.id].map((shape) => (
-                        <button
-                          key={shape.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteCircleShape(page.id, shape.id);
-                          }}
-                          style={{
-                            background: 'rgba(233, 30, 99, 0.9)',
-                            border: 'none',
-                            borderRadius: '4px',
-                            color: 'white',
-                            cursor: 'pointer',
-                            padding: '2px 6px',
-                            fontSize: '8px'
-                          }}
-                          title={`Delete ${shape.type} shape`}
-                        >
-                          🗑️
-                        </button>
-                      ))}
                     </div>
                   )}
 
