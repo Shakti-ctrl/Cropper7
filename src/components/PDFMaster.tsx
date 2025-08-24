@@ -1237,7 +1237,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       }
       
       // Draw resize handles if this shape is selected for resize
-      if (selectedShapeForResize && selectedShapeForResize.pageId === page.id && selectedShapeForResize.shapeId === shape.id) {
+      if (selectedShapeForEdit && selectedShapeForEdit.pageId === page.id && selectedShapeForEdit.shapeId === shape.id) {
         if (shape.points.length >= 2) {
           let handlePoints: {x: number, y: number}[] = [];
           
@@ -1346,7 +1346,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       ctx.stroke();
       ctx.restore();
     }
-  }, [pageCircles, isDrawingShape, drawingPageId, currentShapePoints, selectedShape, selectedShapeForResize]);
+  }, [pageCircles, isDrawingShape, drawingPageId, currentShapePoints, selectedShape, selectedShapeForEdit]);
 
   const saveCurrentSession = useCallback(() => {
     if (!activeSession) return;
