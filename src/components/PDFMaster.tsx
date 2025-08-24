@@ -143,7 +143,6 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [showShapeSelector, setShowShapeSelector] = useState(false);
   const [selectedShape, setSelectedShape] = useState<string | null>(null);
   const [pageCircles, setPageCircles] = useState<{[pageId: string]: CircleShape[]}>({});
-  const [drawingPageId, setDrawingPageId] = useState<string | null>(null);
   const [isDrawingShape, setIsDrawingShape] = useState(false);
   const [currentShapePoints, setCurrentShapePoints] = useState<{ x: number; y: number }[]>([]);
   const [circleHistory, setCircleHistory] = useState<{[pageId: string]: CircleShape[]}[]>([]);
