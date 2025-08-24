@@ -107,14 +107,249 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [showRearrangeOptions, setShowRearrangeOptions] = useState(false);
   const [rearrangeInput, setRearrangeInput] = useState('');
 
+  // Group Mode functionality
+  const [groupMode, setGroupMode] = useState(false);
+  const [showGroupTags, setShowGroupTags] = useState(false);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [pageGroups, setPageGroups] = useState<{[pageId: string]: string}>({});
+  const [availableTags, setAvailableTags] = useState<string[]>([
+    '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟',
+    '1️⃣1️⃣', '1️⃣2️⃣', '1️⃣3️⃣', '1️⃣4️⃣', '1️⃣5️⃣', '1️⃣6️⃣', '1️⃣7️⃣', '1️⃣8️⃣', '1️⃣9️⃣', '2️⃣0️⃣'
+  ]);
+  const [groupTagsPosition, setGroupTagsPosition] = useState({ x: 150, y: 150 });
+  const [groupTagsSize, setGroupTagsSize] = useState({ width: 400, height: 300 });
+  const [showExportOptions, setShowExportOptions] = useState(false);
+  const [showCustomNames, setShowCustomNames] = useState(false);
+  const [customPDFNames, setCustomPDFNames] = useState<{[tag: string]: string}>({});
+  const [customNamesPosition, setCustomNamesPosition] = useState({ x: 200, y: 200 });
+  const [customNamesSize, setCustomNamesSize] = useState({ width: 500, height: 400 });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const floatingRefs = useRef<{[key: string]: HTMLDivElement}>({});
   const canvasRefs = useRef<{[key: string]: HTMLCanvasElement}>({});
+  const groupTagsRef = useRef<HTMLDivElement>(null);
+  const customNamesRef = useRef<HTMLDivElement>(null);
 
   // Session management functions - exact same as cropper
   const generateSessionId = () => `pdf_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Group Mode Functions
+  const toggleGroupMode = () => {
+    if (!groupMode) {
+      setGroupMode(true);
+      setShowGroupTags(true);
+    } else {
+      setGroupMode(false);
+      setShowGroupTags(false);
+      setSelectedTag(null);
+    }
+  };
+
+  const addMoreTags = () => {
+    const nextNumbers = ['2️⃣1️⃣', '2️⃣2️⃣', '2️⃣3️⃣', '2️⃣4️⃣', '2️⃣5️⃣', '2️⃣6️⃣', '2️⃣7️⃣', '2️⃣8️⃣', '2️⃣9️⃣', '3️⃣0️⃣'];
+    const currentLength = availableTags.length;
+    const newTags = nextNumbers.slice(0, Math.min(10, 50 - currentLength));
+    setAvailableTags(prev => [...prev, ...newTags]);
+  };
+
+  const assignTagToPage = (pageId: string) => {
+    if (!selectedTag || !groupMode) return;
+    
+    setPageGroups(prev => ({
+      ...prev,
+      [pageId]: selectedTag
+    }));
+  };
+
+  const removeTagFromPage = (pageId: string) => {
+    setPageGroups(prev => {
+      const newGroups = { ...prev };
+      delete newGroups[pageId];
+      return newGroups;
+    });
+  };
+
+  const getGroupedPages = () => {
+    const groups: {[tag: string]: PDFPage[]} = {};
+    pages.forEach(page => {
+      const tag = pageGroups[page.id];
+      if (tag) {
+        if (!groups[tag]) groups[tag] = [];
+        groups[tag].push(page);
+      }
+    });
+    return groups;
+  };
+
+  const getGroupCount = () => {
+    return Object.keys(getGroupedPages()).length;
+  };
+
+  const handleGroupZip = () => {
+    const groupCount = getGroupCount();
+    if (groupCount === 0) {
+      alert('No groups created. Please assign tags to pages first.');
+      return;
+    }
+    setShowExportOptions(true);
+  };
+
+  const exportWithDefaultNames = async () => {
+    setShowExportOptions(false);
+    await createGroupedPDFZip(false);
+  };
+
+  const exportWithCustomNames = () => {
+    setShowExportOptions(false);
+    const groups = getGroupedPages();
+    const defaultNames: {[tag: string]: string} = {};
+    
+    Object.keys(groups).forEach((tag, index) => {
+      defaultNames[tag] = `Group_${index + 1}.pdf`;
+    });
+    
+    setCustomPDFNames(defaultNames);
+    setShowCustomNames(true);
+  };
+
+  const createGroupedPDFZip = async (useCustomNames: boolean = false) => {
+    const groups = getGroupedPages();
+    const groupKeys = Object.keys(groups);
+    
+    if (groupKeys.length === 0) {
+      alert('No groups to export');
+      return;
+    }
+
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', groupKeys.length);
+    
+    try {
+      updateProcessingJob(jobId, { message: `Creating ${groupKeys.length} PDFs for groups...` });
+      
+      // Dynamic import of JSZip
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      
+      for (let i = 0; i < groupKeys.length; i++) {
+        const tag = groupKeys[i];
+        const groupPages = groups[tag];
+        
+        updateProcessingJob(jobId, {
+          progress: i,
+          message: `Creating PDF for group ${tag} (${groupPages.length} pages)`
+        });
+        
+        // Create PDF for this group
+        const { PDFDocument } = await import('pdf-lib');
+        const pdfDoc = await PDFDocument.create();
+        
+        for (const page of groupPages.sort((a, b) => a.order - b.order)) {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d')!;
+          
+          canvas.width = page.width;
+          canvas.height = page.height;
+          
+          const img = new Image();
+          img.src = page.imageData;
+          await new Promise((resolve) => { img.onload = resolve; });
+          
+          ctx.save();
+          if (page.rotation !== 0) {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            ctx.translate(centerX, centerY);
+            ctx.rotate((page.rotation * Math.PI) / 180);
+            ctx.translate(-centerX, -centerY);
+          }
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          ctx.restore();
+          
+          const imageBytes = canvas.toDataURL('image/png', 1.0);
+          const pngImage = await pdfDoc.embedPng(imageBytes);
+          const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
+          pdfPage.drawImage(pngImage, {
+            x: 0,
+            y: 0,
+            width: canvas.width,
+            height: canvas.height
+          });
+        }
+        
+        const pdfBytes = await pdfDoc.save();
+        
+        // Get filename
+        const filename = useCustomNames && customPDFNames[tag] 
+          ? customPDFNames[tag].endsWith('.pdf') ? customPDFNames[tag] : `${customPDFNames[tag]}.pdf`
+          : `Group_${i + 1}.pdf`;
+        
+        zip.file(filename, pdfBytes);
+      }
+      
+      updateProcessingJob(jobId, { message: 'Creating ZIP file...' });
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      
+      // Download ZIP
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeSession.name.replace(/\s+/g, '_')}_grouped_pdfs.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      completeProcessingJob(jobId, 'completed', `✅ Created ${groupKeys.length} PDFs in ZIP file successfully!`);
+      setShowCustomNames(false);
+      
+    } catch (error) {
+      console.error('Error creating grouped PDF ZIP:', error);
+      completeProcessingJob(jobId, 'error', `❌ Error creating grouped PDFs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Drag handlers for floating windows
+  const handleGroupTagsDrag = (e: React.MouseEvent) => {
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPos = groupTagsPosition;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = startPos.x + (e.clientX - startX);
+      const newY = startPos.y + (e.clientY - startY);
+      setGroupTagsPosition({ x: Math.max(0, newX), y: Math.max(0, newY) });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleCustomNamesDrag = (e: React.MouseEvent) => {
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPos = customNamesPosition;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = startPos.x + (e.clientX - startX);
+      const newY = startPos.y + (e.clientY - startY);
+      setCustomNamesPosition({ x: Math.max(0, newX), y: Math.max(0, newY) });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
   
   // Image splitting functions
   const saveToHistory = () => {
@@ -1699,6 +1934,40 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 {splitMode ? '✂️ Split ON' : '✂️ Split Images'}
               </button>
               <button
+                onClick={toggleGroupMode}
+                style={{
+                  background: groupMode ? 'linear-gradient(45deg, #9C27B0, #7B1FA2)' : 'rgba(156, 39, 176, 0.2)',
+                  border: '1px solid rgba(156, 39, 176, 0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: groupMode ? 'white' : '#9C27B0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: groupMode ? 'bold' : 'normal'
+                }}
+              >
+                {groupMode ? '🏷️ Group ON' : '🏷️ Group Mode'}
+              </button>
+              {getGroupCount() > 0 && (
+                <button
+                  onClick={handleGroupZip}
+                  disabled={isCurrentSessionProcessing}
+                  style={{
+                    background: 'linear-gradient(45deg, #FF5722, #D84315)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    color: 'white',
+                    cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    opacity: isCurrentSessionProcessing ? 0.7 : 1
+                  }}
+                >
+                  📦 GroupZip ({getGroupCount()} groups)
+                </button>
+              )}
+              <button
                 onClick={async () => {
                   setPreviewMode(!previewMode);
                   if (!previewMode && pages.length > 0) {
@@ -2517,7 +2786,13 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   transition: 'all 0.3s ease',
                   overflow: 'hidden'
                 }}
-                onClick={() => !rearrangeMode && togglePageSelection(page.id)}
+                onClick={() => {
+                  if (groupMode) {
+                    assignTagToPage(page.id);
+                  } else if (!rearrangeMode) {
+                    togglePageSelection(page.id);
+                  }
+                }}
               >
                 {/* Serial Number Badge - same as cropper */}
                 <div style={{
@@ -2540,6 +2815,39 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                 }}>
                   {index + 1}
                 </div>
+
+                {/* Group Tag Badge */}
+                {pageGroups[page.id] && (
+                  <div style={{
+                    position: "absolute",
+                    top: "5px",
+                    right: "5px",
+                    background: "linear-gradient(45deg, #9C27B0, #7B1FA2)",
+                    color: "white",
+                    borderRadius: "12px",
+                    padding: "4px 8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 200,
+                    fontSize: "16px",
+                    fontWeight: "bold",
+                    border: "2px solid white",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
+                    minWidth: "35px",
+                    cursor: groupMode ? 'pointer' : 'default'
+                  }}
+                  onClick={(e) => {
+                    if (groupMode) {
+                      e.stopPropagation();
+                      removeTagFromPage(page.id);
+                    }
+                  }}
+                  title={groupMode ? "Click to remove tag" : `Group: ${pageGroups[page.id]}`}
+                >
+                    {pageGroups[page.id]}
+                  </div>
+                )}
 
                 {/* Header - same as cropper */}
                 <div className="cropper-header" style={{
@@ -3243,6 +3551,389 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             </div>
           </div>
         )
+      )}
+
+      {/* Group Tags Floating Window */}
+      {showGroupTags && (
+        <div
+          ref={groupTagsRef}
+          style={{
+            position: 'fixed',
+            left: groupTagsPosition.x,
+            top: groupTagsPosition.y,
+            width: groupTagsSize.width,
+            height: groupTagsSize.height,
+            background: 'white',
+            border: '2px solid #9C27B0',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            zIndex: 2000,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            resize: 'both',
+            minWidth: '350px',
+            minHeight: '250px'
+          }}
+        >
+          {/* Draggable Header */}
+          <div 
+            style={{
+              background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
+              color: 'white',
+              padding: '12px 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'move',
+              borderRadius: '10px 10px 0 0'
+            }}
+            onMouseDown={handleGroupTagsDrag}
+          >
+            <span style={{ fontSize: '16px', fontWeight: 'bold' }}>
+              🏷️ Group Tags {selectedTag && `- Selected: ${selectedTag}`}
+            </span>
+            <button
+              onClick={() => setShowGroupTags(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '0',
+                width: '24px',
+                height: '24px'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Content */}
+          <div style={{ 
+            flex: 1, 
+            padding: '16px',
+            overflow: 'auto',
+            background: '#f9f9f9'
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))',
+              gap: '8px',
+              marginBottom: '16px'
+            }}>
+              {availableTags.map((tag, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
+                  style={{
+                    background: selectedTag === tag 
+                      ? 'linear-gradient(45deg, #4CAF50, #45a049)' 
+                      : 'linear-gradient(45deg, #E0E0E0, #BDBDBD)',
+                    border: selectedTag === tag ? '3px solid #2E7D32' : '2px solid #999',
+                    borderRadius: '8px',
+                    padding: '12px 8px',
+                    cursor: 'pointer',
+                    fontSize: '20px',
+                    fontWeight: 'bold',
+                    color: selectedTag === tag ? 'white' : '#333',
+                    transition: 'all 0.2s ease',
+                    minHeight: '50px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: selectedTag === tag ? 'scale(1.1)' : 'scale(1)',
+                    boxShadow: selectedTag === tag ? '0 4px 12px rgba(76, 175, 80, 0.4)' : '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                  title={`Tag: ${tag}`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+
+            {/* Add More Tags Button */}
+            <button
+              onClick={addMoreTags}
+              disabled={availableTags.length >= 50}
+              style={{
+                background: availableTags.length >= 50 
+                  ? 'linear-gradient(45deg, #666, #555)' 
+                  : 'linear-gradient(45deg, #2196F3, #1976D2)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 16px',
+                color: 'white',
+                cursor: availableTags.length >= 50 ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                fontSize: '14px',
+                width: '100%',
+                opacity: availableTags.length >= 50 ? 0.5 : 1
+              }}
+            >
+              {availableTags.length >= 50 ? '🚫 Maximum tags reached' : '➕ Add More Tags'}
+            </button>
+
+            {/* Instructions */}
+            <div style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: 'rgba(156, 39, 176, 0.1)',
+              borderRadius: '8px',
+              fontSize: '12px',
+              color: '#7B1FA2',
+              lineHeight: '1.4'
+            }}>
+              <strong>📝 How to use:</strong><br/>
+              1. Select a tag by clicking on it<br/>
+              2. Click on images to assign the selected tag<br/>
+              3. Create different groups with different tags<br/>
+              4. Use GroupZip to export separate PDFs for each group
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Options Modal */}
+      {showExportOptions && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2500
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(0, 20, 40, 0.95), rgba(0, 40, 80, 0.9))',
+            border: '2px solid rgba(156, 39, 176, 0.5)',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%'
+          }}>
+            <h3 style={{ color: '#9C27B0', textAlign: 'center', marginBottom: '24px' }}>
+              📦 Choose Export Option
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <button
+                onClick={exportWithDefaultNames}
+                style={{
+                  background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '16px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px'
+                }}
+              >
+                🎯 Use Default Names (Group_1.pdf, Group_2.pdf...)
+              </button>
+
+              <button
+                onClick={exportWithCustomNames}
+                style={{
+                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '16px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px'
+                }}
+              >
+                ✏️ Give Custom Names to PDFs
+              </button>
+
+              <button
+                onClick={() => setShowExportOptions(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '12px',
+                  padding: '12px 24px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Names Floating Window */}
+      {showCustomNames && (
+        <div
+          ref={customNamesRef}
+          style={{
+            position: 'fixed',
+            left: customNamesPosition.x,
+            top: customNamesPosition.y,
+            width: customNamesSize.width,
+            height: customNamesSize.height,
+            background: 'white',
+            border: '2px solid #FF9800',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            zIndex: 2000,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            resize: 'both',
+            minWidth: '450px',
+            minHeight: '350px'
+          }}
+        >
+          {/* Draggable Header */}
+          <div 
+            style={{
+              background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+              color: 'white',
+              padding: '12px 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'move',
+              borderRadius: '10px 10px 0 0'
+            }}
+            onMouseDown={handleCustomNamesDrag}
+          >
+            <span style={{ fontSize: '16px', fontWeight: 'bold' }}>
+              ✏️ Custom PDF Names
+            </span>
+            <button
+              onClick={() => setShowCustomNames(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '0',
+                width: '24px',
+                height: '24px'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Content */}
+          <div style={{ 
+            flex: 1, 
+            padding: '16px',
+            overflow: 'auto',
+            background: '#f9f9f9',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <div style={{ flex: 1, marginBottom: '16px' }}>
+              {Object.entries(customPDFNames).map(([tag, name], index) => (
+                <div key={tag} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px',
+                  background: 'white',
+                  borderRadius: '8px',
+                  marginBottom: '8px',
+                  border: '1px solid #ddd'
+                }}>
+                  <div style={{
+                    background: 'linear-gradient(45deg, #9C27B0, #7B1FA2)',
+                    color: 'white',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    minWidth: '50px',
+                    textAlign: 'center'
+                  }}>
+                    {tag}
+                  </div>
+                  
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setCustomPDFNames(prev => ({
+                      ...prev,
+                      [tag]: e.target.value
+                    }))}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      border: '1px solid #ccc',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                    placeholder="Enter PDF name"
+                  />
+                  
+                  <button
+                    onClick={() => {
+                      const input = document.querySelector(`input[value="${name}"]`) as HTMLInputElement;
+                      if (input) {
+                        input.focus();
+                        input.select();
+                      }
+                    }}
+                    style={{
+                      background: 'linear-gradient(45deg, #2196F3, #1976D2)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                    title="Edit name"
+                  >
+                    ✏️
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Final Export Button */}
+            <button
+              onClick={() => createGroupedPDFZip(true)}
+              disabled={isCurrentSessionProcessing}
+              style={{
+                background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '16px 24px',
+                color: 'white',
+                cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                fontSize: '16px',
+                opacity: isCurrentSessionProcessing ? 0.7 : 1
+              }}
+            >
+              📦 Final ZIP Export
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
