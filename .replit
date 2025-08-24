@@ -1,4 +1,5 @@
 modules = ["nodejs-20", "web", "ruby-3.2"]
+run = "npm run start"
 [agent]
 expertMode = true
 
@@ -30,6 +31,10 @@ args = "React Development Server"
 task = "workflow.run"
 args = "React Dev Server"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "React App"
+
 [[workflows.workflow]]
 name = "React Development Server"
 author = "agent"
@@ -49,6 +54,18 @@ task = "shell.exec"
 args = "BROWSER=none npm start"
 waitForPort = 3000
 
+[[workflows.workflow]]
+name = "React App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "BROWSER=none HOST=0.0.0.0 PORT=5000 npm start"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[ports]]
 localPort = 3000
 externalPort = 3000
@@ -60,3 +77,6 @@ externalPort = 3001
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[deployment]
+run = ["sh", "-c", "npm run start"]

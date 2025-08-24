@@ -1479,6 +1479,11 @@
   resolved "https://registry.npmjs.org/@napi-rs/canvas-linux-x64-gnu/-/canvas-linux-x64-gnu-0.1.77.tgz"
   integrity sha512-Lt6Sef5l0+5O1cSZ8ysO0JI+x+rSrqZyXs5f7+kVkCAOVq8X5WTcDVbvWvEs2aRhrWTp5y25Jf2Bn+3IcNHOuQ==
 
+"@napi-rs/canvas-linux-x64-musl@0.1.77":
+  version "0.1.77"
+  resolved "https://registry.npmjs.org/@napi-rs/canvas-linux-x64-musl/-/canvas-linux-x64-musl-0.1.77.tgz"
+  integrity sha512-NiNFvC+D+omVeJ3IjYlIbyt/igONSABVe9z0ZZph29epHgZYu4eHwV9osfpRt1BGGOAM8LkFrHk4LBdn2EDymA==
+
 "@napi-rs/canvas@^0.1.74":
   version "0.1.77"
   resolved "https://registry.npmjs.org/@napi-rs/canvas/-/canvas-0.1.77.tgz"
