@@ -1,0 +1,44 @@
+rs
+  Line 3100:11:  'savePreviewStateAndApply' is assigned a value but never used                                                                                                             @typescript-eslint/no-unused-vars
+
+webpack compiled with 1 warning
+ERROR in src/components/PDFMaster.tsx:1240:11
+TS2552: Cannot find name 'selectedShapeForResize'. Did you mean 'selectedShapeForEdit'?
+    1238 |       
+    1239 |       // Draw resize handles if this shape is selected for resize
+  > 1240 |       if (selectedShapeForResize && selectedShapeForResize.pageId === page.id && selectedShapeForResize.shapeId === shape.id) {
+         |           ^^^^^^^^^^^^^^^^^^^^^^
+    1241 |         if (shape.points.length >= 2) {
+    1242 |           let handlePoints: {x: number, y: number}[] = [];
+    1243 |           
+
+ERROR in src/components/PDFMaster.tsx:1240:37
+TS2552: Cannot find name 'selectedShapeForResize'. Did you mean 'selectedShapeForEdit'?
+    1238 |       
+    1239 |       // Draw resize handles if this shape is selected for resize
+  > 1240 |       if (selectedShapeForResize && selectedShapeForResize.pageId === page.id && selectedShapeForResize.shapeId === shape.id) {
+         |                                     ^^^^^^^^^^^^^^^^^^^^^^
+    1241 |         if (shape.points.length >= 2) {
+    1242 |           let handlePoints: {x: number, y: number}[] = [];
+    1243 |           
+
+ERROR in src/components/PDFMaster.tsx:1240:82
+TS2552: Cannot find name 'selectedShapeForResize'. Did you mean 'selectedShapeForEdit'?
+    1238 |       
+    1239 |       // Draw resize handles if this shape is selected for resize
+  > 1240 |       if (selectedShapeForResize && selectedShapeForResize.pageId === page.id && selectedShapeForResize.shapeId === shape.id) {
+         |                                                                                  ^^^^^^^^^^^^^^^^^^^^^^
+    1241 |         if (shape.points.length >= 2) {
+    1242 |           let handlePoints: {x: number, y: number}[] = [];
+    1243 |           
+
+ERROR in src/components/PDFMaster.tsx:1349:86
+TS2552: Cannot find name 'selectedShapeForResize'. Did you mean 'selectedShapeForEdit'?
+    1347 |       ctx.restore();
+    1348 |     }
+  > 1349 |   }, [pageCircles, isDrawingShape, drawingPageId, currentShapePoints, selectedShape, selectedShapeForResize]);
+         |                                                                                      ^^^^^^^^^^^^^^^^^^^^^^
+    1350 |
+    1351 |   const saveCurrentSession = useCallback(() => {
+    1352 |     if (!activeSession) return;
+
