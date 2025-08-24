@@ -125,6 +125,40 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [customNamesPosition, setCustomNamesPosition] = useState({ x: 200, y: 200 });
   const [customNamesSize, setCustomNamesSize] = useState({ width: 500, height: 400 });
 
+  // Circling functionality
+  interface CircleShape {
+    id: string;
+    type: 'circle' | 'rectangle' | 'ellipse' | 'triangle' | 'polygon' | 'custom';
+    points: { x: number; y: number }[];
+    center?: { x: number; y: number };
+    radius?: number;
+    width?: number;
+    height?: number;
+    color: string;
+    strokeWidth: number;
+    isDrawing?: boolean;
+  }
+
+  const [circlingMode, setCirclingMode] = useState(false);
+  const [showShapeSelector, setShowShapeSelector] = useState(false);
+  const [selectedShape, setSelectedShape] = useState<string | null>(null);
+  const [pageCircles, setPageCircles] = useState<{[pageId: string]: CircleShape[]}>({});
+  const [drawingPageId, setDrawingPageId] = useState<string | null>(null);
+  const [isDrawingShape, setIsDrawingShape] = useState(false);
+  const [currentShapePoints, setCurrentShapePoints] = useState<{ x: number; y: number }[]>([]);
+  const [circleHistory, setCircleHistory] = useState<{[pageId: string]: CircleShape[]}[]>([]);
+  const [shapeSelectorPosition, setShapeSelectorPosition] = useState({ x: 300, y: 150 });
+  const [shapeSelectorSize, setShapeSelectorSize] = useState({ width: 450, height: 350 });
+  const [selectedShapeForResize, setSelectedShapeForResize] = useState<{pageId: string, shapeId: string} | null>(null);
+  const [availableShapes, setAvailableShapes] = useState([
+    { type: 'circle', name: '⭕ Circle', icon: '⭕' },
+    { type: 'rectangle', name: '⬜ Rectangle', icon: '⬜' },
+    { type: 'ellipse', name: '🥚 Ellipse', icon: '🥚' },
+    { type: 'triangle', name: '🔺 Triangle', icon: '🔺' },
+    { type: 'polygon', name: '🔷 Polygon', icon: '🔷' },
+    { type: 'custom', name: '✏️ Custom', icon: '✏️' }
+  ]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -146,6 +180,317 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       setShowGroupTags(false);
       setSelectedTag(null);
     }
+  };
+
+  // Circling Mode Functions
+  const toggleCirclingMode = () => {
+    if (!circlingMode) {
+      setCirclingMode(true);
+      setShowShapeSelector(true);
+    } else {
+      setCirclingMode(false);
+      setShowShapeSelector(false);
+      setSelectedShape(null);
+      setIsDrawingShape(false);
+      setDrawingPageId(null);
+    }
+  };
+
+  const saveCircleHistory = () => {
+    setCircleHistory(prev => [...prev, { ...pageCircles }]);
+  };
+
+  const undoLastCircle = () => {
+    if (circleHistory.length === 0) return;
+    
+    const lastState = circleHistory[circleHistory.length - 1];
+    setPageCircles(lastState);
+    setCircleHistory(prev => prev.slice(0, -1));
+  };
+
+  const startDrawingShape = (pageId: string, event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!circlingMode || !selectedShape) return;
+    
+    const canvas = canvasRefs.current[pageId];
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    setDrawingPageId(pageId);
+    setIsDrawingShape(true);
+    setCurrentShapePoints([{ x, y }]);
+    saveCircleHistory();
+  };
+
+  const continueDrawingShape = (pageId: string, event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawingShape || drawingPageId !== pageId) return;
+    
+    const canvas = canvasRefs.current[pageId];
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    if (selectedShape === 'custom' || selectedShape === 'polygon') {
+      setCurrentShapePoints(prev => [...prev, { x, y }]);
+    } else {
+      setCurrentShapePoints(prev => [prev[0], { x, y }]);
+    }
+  };
+
+  const finishDrawingShape = () => {
+    if (!isDrawingShape || !drawingPageId || currentShapePoints.length < 2) {
+      setIsDrawingShape(false);
+      setDrawingPageId(null);
+      setCurrentShapePoints([]);
+      return;
+    }
+    
+    const shapeId = `shape_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let newShape: CircleShape;
+
+    switch (selectedShape) {
+      case 'circle':
+        const centerX = (currentShapePoints[0].x + currentShapePoints[1].x) / 2;
+        const centerY = (currentShapePoints[0].y + currentShapePoints[1].y) / 2;
+        const radius = Math.sqrt(
+          Math.pow(currentShapePoints[1].x - centerX, 2) + 
+          Math.pow(currentShapePoints[1].y - centerY, 2)
+        );
+        newShape = {
+          id: shapeId,
+          type: 'circle',
+          points: currentShapePoints,
+          center: { x: centerX, y: centerY },
+          radius,
+          color: '#ff0000',
+          strokeWidth: 3
+        };
+        break;
+      case 'rectangle':
+        newShape = {
+          id: shapeId,
+          type: 'rectangle',
+          points: currentShapePoints,
+          width: Math.abs(currentShapePoints[1].x - currentShapePoints[0].x),
+          height: Math.abs(currentShapePoints[1].y - currentShapePoints[0].y),
+          color: '#00ff00',
+          strokeWidth: 3
+        };
+        break;
+      case 'ellipse':
+        newShape = {
+          id: shapeId,
+          type: 'ellipse',
+          points: currentShapePoints,
+          width: Math.abs(currentShapePoints[1].x - currentShapePoints[0].x),
+          height: Math.abs(currentShapePoints[1].y - currentShapePoints[0].y),
+          color: '#0000ff',
+          strokeWidth: 3
+        };
+        break;
+      default:
+        newShape = {
+          id: shapeId,
+          type: selectedShape as any,
+          points: [...currentShapePoints],
+          color: '#ff00ff',
+          strokeWidth: 3
+        };
+    }
+    
+    setPageCircles(prev => ({
+      ...prev,
+      [drawingPageId]: [...(prev[drawingPageId] || []), newShape]
+    }));
+    
+    setIsDrawingShape(false);
+    setDrawingPageId(null);
+    setCurrentShapePoints([]);
+  };
+
+  const deleteCircleShape = (pageId: string, shapeId: string) => {
+    saveCircleHistory();
+    setPageCircles(prev => ({
+      ...prev,
+      [pageId]: (prev[pageId] || []).filter(shape => shape.id !== shapeId)
+    }));
+  };
+
+  const moveCircleShape = (pageId: string, shapeId: string, deltaX: number, deltaY: number) => {
+    setPageCircles(prev => ({
+      ...prev,
+      [pageId]: (prev[pageId] || []).map(shape => {
+        if (shape.id === shapeId) {
+          return {
+            ...shape,
+            points: shape.points.map(point => ({
+              x: point.x + deltaX,
+              y: point.y + deltaY
+            })),
+            center: shape.center ? {
+              x: shape.center.x + deltaX,
+              y: shape.center.y + deltaY
+            } : undefined
+          };
+        }
+        return shape;
+      })
+    }));
+  };
+
+  const splitImageByCircles = async (page: PDFPage): Promise<PDFPage[]> => {
+    const pageShapes = pageCircles[page.id];
+    if (!pageShapes || pageShapes.length === 0) {
+      return [page];
+    }
+    
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const sourceCanvas = document.createElement('canvas');
+        const sourceCtx = sourceCanvas.getContext('2d')!;
+        
+        sourceCanvas.width = img.naturalWidth || img.width;
+        sourceCanvas.height = img.naturalHeight || img.height;
+        sourceCtx.drawImage(img, 0, 0, sourceCanvas.width, sourceCanvas.height);
+        
+        const splitPages: PDFPage[] = [];
+        
+        const displayCanvas = canvasRefs.current[page.id];
+        const scaleX = displayCanvas ? sourceCanvas.width / displayCanvas.width : 1;
+        const scaleY = displayCanvas ? sourceCanvas.height / displayCanvas.height : 1;
+        
+        pageShapes.forEach((shape, shapeIndex) => {
+          const segmentCanvas = document.createElement('canvas');
+          const segmentCtx = segmentCanvas.getContext('2d')!;
+          
+          // Calculate bounding box for shape
+          let minX = Math.min(...shape.points.map(p => p.x * scaleX));
+          let maxX = Math.max(...shape.points.map(p => p.x * scaleX));
+          let minY = Math.min(...shape.points.map(p => p.y * scaleY));
+          let maxY = Math.max(...shape.points.map(p => p.y * scaleY));
+          
+          const segmentWidth = Math.ceil(maxX - minX);
+          const segmentHeight = Math.ceil(maxY - minY);
+          
+          if (segmentWidth > 0 && segmentHeight > 0) {
+            segmentCanvas.width = segmentWidth;
+            segmentCanvas.height = segmentHeight;
+            
+            // Create clipping path based on shape
+            segmentCtx.save();
+            segmentCtx.beginPath();
+            
+            if (shape.type === 'circle' && shape.center && shape.radius) {
+              segmentCtx.arc(
+                (shape.center.x * scaleX) - minX,
+                (shape.center.y * scaleY) - minY,
+                shape.radius * Math.min(scaleX, scaleY),
+                0,
+                2 * Math.PI
+              );
+            } else if (shape.type === 'rectangle') {
+              segmentCtx.rect(0, 0, segmentWidth, segmentHeight);
+            } else if (shape.type === 'ellipse') {
+              const centerX = segmentWidth / 2;
+              const centerY = segmentHeight / 2;
+              const radiusX = segmentWidth / 2;
+              const radiusY = segmentHeight / 2;
+              segmentCtx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            } else {
+              // Custom or polygon shape
+              const scaledPoints = shape.points.map(p => ({
+                x: (p.x * scaleX) - minX,
+                y: (p.y * scaleY) - minY
+              }));
+              segmentCtx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+              for (let i = 1; i < scaledPoints.length; i++) {
+                segmentCtx.lineTo(scaledPoints[i].x, scaledPoints[i].y);
+              }
+              segmentCtx.closePath();
+            }
+            
+            segmentCtx.clip();
+            
+            // Draw the image portion
+            segmentCtx.drawImage(
+              sourceCanvas,
+              minX, minY, segmentWidth, segmentHeight,
+              0, 0, segmentWidth, segmentHeight
+            );
+            
+            segmentCtx.restore();
+            
+            const segmentImageData = segmentCanvas.toDataURL('image/png', 0.9);
+            
+            const newPage: PDFPage = {
+              ...page,
+              id: `${page.id}_circle_${shapeIndex}`,
+              name: `${page.name}_${shape.type}_${shapeIndex + 1}`,
+              imageData: segmentImageData,
+              parentPageId: page.id,
+              splitIndex: shapeIndex,
+              order: page.order + (shapeIndex * 0.001),
+              width: segmentWidth,
+              height: segmentHeight,
+              crop: { x: 0, y: 0, width: segmentWidth, height: segmentHeight },
+              isOriginal: false
+            };
+            
+            splitPages.push(newPage);
+          }
+        });
+        
+        resolve(splitPages.length > 0 ? splitPages : [page]);
+      };
+      
+      img.onerror = () => {
+        console.error('Failed to load image for circle splitting');
+        resolve([page]);
+      };
+      img.src = page.imageData;
+    });
+  };
+
+  const applyCirclesToPage = async (pageId: string) => {
+    saveToHistory();
+    const page = pages.find(p => p.id === pageId);
+    if (!page) return;
+    
+    const circledPages = await splitImageByCircles(page);
+    
+    if (circledPages.length > 1 || (circledPages.length === 1 && circledPages[0].id !== page.id)) {
+      setPages(prev => {
+        const otherPages = prev.filter(p => p.id !== pageId);
+        const updatedPages = [...otherPages, ...circledPages];
+        
+        return updatedPages
+          .sort((a, b) => a.order - b.order)
+          .map((p, index) => ({ ...p, order: index }));
+      });
+    }
+  };
+
+  const applyCirclesToAllPages = async () => {
+    if (!applyToAll) return;
+    
+    saveToHistory();
+    const allCircledPages: PDFPage[] = [];
+    
+    for (const page of pages) {
+      if (pageCircles[page.id] && pageCircles[page.id].length > 0) {
+        const circledPages = await splitImageByCircles(page);
+        allCircledPages.push(...circledPages);
+      } else {
+        allCircledPages.push(page);
+      }
+    }
+    
+    setPages(allCircledPages.sort((a, b) => a.order - b.order));
   };
 
   const addMoreTags = () => {
@@ -360,6 +705,26 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       const newX = startPos.x + (e.clientX - startX);
       const newY = startPos.y + (e.clientY - startY);
       setCustomNamesPosition({ x: Math.max(0, newX), y: Math.max(0, newY) });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleShapeSelectorDrag = (e: React.MouseEvent) => {
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPos = shapeSelectorPosition;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = startPos.x + (e.clientX - startX);
+      const newY = startPos.y + (e.clientY - startY);
+      setShapeSelectorPosition({ x: Math.max(0, newX), y: Math.max(0, newY) });
     };
 
     const handleMouseUp = () => {
@@ -737,6 +1102,217 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     ctx.restore();
   }, [isDrawing, drawingPageId, currentSplitLine]);
 
+  const drawCircleShapesOnCanvas = useCallback((canvas: HTMLCanvasElement, page: PDFPage) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const pageShapes = pageCircles[page.id] || [];
+    
+    // Draw existing shapes
+    pageShapes.forEach((shape, shapeIndex) => {
+      ctx.save();
+      ctx.strokeStyle = shape.color;
+      ctx.lineWidth = shape.strokeWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([]);
+      
+      ctx.beginPath();
+      
+      switch (shape.type) {
+        case 'circle':
+          if (shape.center && shape.radius) {
+            ctx.arc(shape.center.x, shape.center.y, shape.radius, 0, 2 * Math.PI);
+          }
+          break;
+        case 'rectangle':
+          if (shape.points.length >= 2) {
+            const x = Math.min(shape.points[0].x, shape.points[1].x);
+            const y = Math.min(shape.points[0].y, shape.points[1].y);
+            const width = Math.abs(shape.points[1].x - shape.points[0].x);
+            const height = Math.abs(shape.points[1].y - shape.points[0].y);
+            ctx.rect(x, y, width, height);
+          }
+          break;
+        case 'ellipse':
+          if (shape.points.length >= 2) {
+            const centerX = (shape.points[0].x + shape.points[1].x) / 2;
+            const centerY = (shape.points[0].y + shape.points[1].y) / 2;
+            const radiusX = Math.abs(shape.points[1].x - shape.points[0].x) / 2;
+            const radiusY = Math.abs(shape.points[1].y - shape.points[0].y) / 2;
+            ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+          }
+          break;
+        case 'triangle':
+          if (shape.points.length >= 2) {
+            const x1 = (shape.points[0].x + shape.points[1].x) / 2;
+            const y1 = shape.points[0].y;
+            const x2 = shape.points[0].x;
+            const y2 = shape.points[1].y;
+            const x3 = shape.points[1].x;
+            const y3 = shape.points[1].y;
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x3, y3);
+            ctx.closePath();
+          }
+          break;
+        default:
+          // Custom or polygon
+          if (shape.points.length > 1) {
+            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            for (let i = 1; i < shape.points.length; i++) {
+              ctx.lineTo(shape.points[i].x, shape.points[i].y);
+            }
+            if (shape.type === 'polygon') {
+              ctx.closePath();
+            }
+          }
+      }
+      
+      ctx.stroke();
+      
+      // Draw shape number
+      if (shape.points.length > 0) {
+        let labelX = shape.points[0].x;
+        let labelY = shape.points[0].y;
+        
+        if (shape.center) {
+          labelX = shape.center.x;
+          labelY = shape.center.y;
+        } else if (shape.points.length > 1) {
+          labelX = (shape.points[0].x + shape.points[1].x) / 2;
+          labelY = (shape.points[0].y + shape.points[1].y) / 2;
+        }
+        
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = shape.color;
+        ctx.lineWidth = 1;
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        ctx.beginPath();
+        ctx.arc(labelX, labelY, 8, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = shape.color;
+        ctx.fillText((shapeIndex + 1).toString(), labelX, labelY);
+      }
+      
+      // Draw resize handles if this shape is selected for resize
+      if (selectedShapeForResize && selectedShapeForResize.pageId === page.id && selectedShapeForResize.shapeId === shape.id) {
+        if (shape.points.length >= 2) {
+          let handlePoints: {x: number, y: number}[] = [];
+          
+          if (shape.type === 'circle' && shape.center && shape.radius) {
+            // 8 points around circle
+            for (let i = 0; i < 8; i++) {
+              const angle = (i * Math.PI) / 4;
+              handlePoints.push({
+                x: shape.center.x + Math.cos(angle) * shape.radius,
+                y: shape.center.y + Math.sin(angle) * shape.radius
+              });
+            }
+          } else if (shape.type === 'rectangle' || shape.type === 'ellipse') {
+            const x1 = Math.min(shape.points[0].x, shape.points[1].x);
+            const y1 = Math.min(shape.points[0].y, shape.points[1].y);
+            const x2 = Math.max(shape.points[0].x, shape.points[1].x);
+            const y2 = Math.max(shape.points[0].y, shape.points[1].y);
+            const centerX = (x1 + x2) / 2;
+            const centerY = (y1 + y2) / 2;
+            
+            handlePoints = [
+              {x: x1, y: y1}, {x: centerX, y: y1}, {x: x2, y: y1},
+              {x: x1, y: centerY}, {x: x2, y: centerY},
+              {x: x1, y: y2}, {x: centerX, y: y2}, {x: x2, y: y2}
+            ];
+          } else {
+            // For custom shapes, use the points themselves
+            handlePoints = [...shape.points];
+          }
+          
+          // Draw handles
+          handlePoints.forEach(point => {
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+          });
+        }
+      }
+      
+      ctx.restore();
+    });
+    
+    // Draw current shape being drawn
+    if (isDrawingShape && drawingPageId === page.id && currentShapePoints.length > 0 && selectedShape) {
+      ctx.save();
+      ctx.strokeStyle = '#ff6666';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([8, 4]);
+      
+      ctx.beginPath();
+      
+      if (currentShapePoints.length >= 2) {
+        switch (selectedShape) {
+          case 'circle':
+            const centerX = (currentShapePoints[0].x + currentShapePoints[1].x) / 2;
+            const centerY = (currentShapePoints[0].y + currentShapePoints[1].y) / 2;
+            const radius = Math.sqrt(
+              Math.pow(currentShapePoints[1].x - centerX, 2) + 
+              Math.pow(currentShapePoints[1].y - centerY, 2)
+            );
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            break;
+          case 'rectangle':
+            const x = Math.min(currentShapePoints[0].x, currentShapePoints[1].x);
+            const y = Math.min(currentShapePoints[0].y, currentShapePoints[1].y);
+            const width = Math.abs(currentShapePoints[1].x - currentShapePoints[0].x);
+            const height = Math.abs(currentShapePoints[1].y - currentShapePoints[0].y);
+            ctx.rect(x, y, width, height);
+            break;
+          case 'ellipse':
+            const eCenterX = (currentShapePoints[0].x + currentShapePoints[1].x) / 2;
+            const eCenterY = (currentShapePoints[0].y + currentShapePoints[1].y) / 2;
+            const radiusX = Math.abs(currentShapePoints[1].x - currentShapePoints[0].x) / 2;
+            const radiusY = Math.abs(currentShapePoints[1].y - currentShapePoints[0].y) / 2;
+            ctx.ellipse(eCenterX, eCenterY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            break;
+          case 'triangle':
+            const tCenterX = (currentShapePoints[0].x + currentShapePoints[1].x) / 2;
+            const tY1 = currentShapePoints[0].y;
+            const tX2 = currentShapePoints[0].x;
+            const tY2 = currentShapePoints[1].y;
+            const tX3 = currentShapePoints[1].x;
+            const tY3 = currentShapePoints[1].y;
+            ctx.moveTo(tCenterX, tY1);
+            ctx.lineTo(tX2, tY2);
+            ctx.lineTo(tX3, tY3);
+            ctx.closePath();
+            break;
+          default:
+            ctx.moveTo(currentShapePoints[0].x, currentShapePoints[0].y);
+            for (let i = 1; i < currentShapePoints.length; i++) {
+              ctx.lineTo(currentShapePoints[i].x, currentShapePoints[i].y);
+            }
+            if (selectedShape === 'polygon' && currentShapePoints.length > 2) {
+              ctx.closePath();
+            }
+        }
+      }
+      
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [pageCircles, isDrawingShape, drawingPageId, currentShapePoints, selectedShape, selectedShapeForResize]);
+
   const saveCurrentSession = useCallback(() => {
     if (!activeSession) return;
 
@@ -862,15 +1438,21 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   }, [pages, editHistory.length]);
   
-  // Always redraw split lines for pages that have them
+  // Always redraw split lines and circle shapes for pages that have them
   useEffect(() => {
     pages.forEach(page => {
       const canvas = canvasRefs.current[page.id];
-      if (canvas && ((page.splitLines && page.splitLines.length > 0) || (isDrawing && drawingPageId === page.id))) {
+      if (canvas && (
+        (page.splitLines && page.splitLines.length > 0) || 
+        (isDrawing && drawingPageId === page.id) ||
+        (pageCircles[page.id] && pageCircles[page.id].length > 0) ||
+        (isDrawingShape && drawingPageId === page.id)
+      )) {
         drawSplitLinesOnCanvas(canvas, page);
+        drawCircleShapesOnCanvas(canvas, page);
       }
     });
-  }, [pages, isDrawing, drawingPageId, currentSplitLine, drawSplitLinesOnCanvas]);
+  }, [pages, isDrawing, drawingPageId, currentSplitLine, drawSplitLinesOnCanvas, pageCircles, isDrawingShape, currentShapePoints, drawCircleShapesOnCanvas]);
 
   // Convert image file to PDFPage - same as cropper logic
   const imageToPage = async (file: File, order: number): Promise<PDFPage | null> => {
@@ -1970,6 +2552,21 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 {groupMode ? '🏷️ Group ON' : '🏷️ Group Mode'}
               </button>
+              <button
+                onClick={toggleCirclingMode}
+                style={{
+                  background: circlingMode ? 'linear-gradient(45deg, #E91E63, #C2185B)' : 'rgba(233, 30, 99, 0.2)',
+                  border: '1px solid rgba(233, 30, 99, 0.3)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  color: circlingMode ? 'white' : '#E91E63',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: circlingMode ? 'bold' : 'normal'
+                }}
+              >
+                {circlingMode ? '⭕ Circling ON' : '⭕ Circling'}
+              </button>
               {getGroupCount() > 0 && (
                 <button
                   onClick={handleGroupZip}
@@ -2523,6 +3120,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   🔄 Apply Splits to All
                 </button>
               )}
+              {applyToAll && Object.keys(pageCircles).some(pageId => pageCircles[pageId].length > 0) && (
+                <button
+                  onClick={applyCirclesToAllPages}
+                  style={{
+                    background: 'linear-gradient(45deg, #E91E63, #C2185B)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '12px'
+                  }}
+                >
+                  ⭕ Apply Circles to All
+                </button>
+              )}
               <button
                 onClick={async () => {
                   if (pages.length === 0) {
@@ -2941,7 +3555,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   />
                   
                   {/* Canvas for drawing split lines - always show if page has lines or in split mode */}
-                  {(splitMode || (page.splitLines && page.splitLines.length > 0)) && (
+                  {(splitMode || (page.splitLines && page.splitLines.length > 0) || circlingMode || (pageCircles[page.id] && pageCircles[page.id].length > 0)) && (
                     <>
                       <canvas
                         ref={(el) => {
@@ -2952,8 +3566,11 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                             if (container) {
                               el.width = container.offsetWidth;
                               el.height = container.offsetHeight;
-                              // Immediately redraw existing lines after canvas setup
-                              setTimeout(() => drawSplitLinesOnCanvas(el, page), 0);
+                              // Immediately redraw existing lines and shapes after canvas setup
+                              setTimeout(() => {
+                                drawSplitLinesOnCanvas(el, page);
+                                drawCircleShapesOnCanvas(el, page);
+                              }, 0);
                             }
                           }
                         }}
@@ -2963,18 +3580,30 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           left: 0,
                           width: '100%',
                           height: '100%',
-                          cursor: splitMode ? 'crosshair' : 'default',
+                          cursor: (splitMode || circlingMode) ? 'crosshair' : 'default',
                           zIndex: 250,
-                          border: splitMode ? '2px dashed rgba(255, 0, 0, 0.5)' : 'none',
-                          background: splitMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                          pointerEvents: splitMode ? 'auto' : 'none'
+                          border: (splitMode || circlingMode) ? '2px dashed rgba(255, 0, 0, 0.5)' : 'none',
+                          background: (splitMode || circlingMode) ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                          pointerEvents: (splitMode || circlingMode) ? 'auto' : 'none'
                         }}
-                        onMouseDown={splitMode ? (e) => startDrawingSplitLine(page.id, e) : undefined}
-                        onMouseMove={splitMode ? (e) => continueDrawingSplitLine(page.id, e) : undefined}
-                        onMouseUp={splitMode ? finishDrawingSplitLine : undefined}
-                        onMouseLeave={splitMode ? finishDrawingSplitLine : undefined}
+                        onMouseDown={(e) => {
+                          if (splitMode) startDrawingSplitLine(page.id, e);
+                          if (circlingMode) startDrawingShape(page.id, e);
+                        }}
+                        onMouseMove={(e) => {
+                          if (splitMode) continueDrawingSplitLine(page.id, e);
+                          if (circlingMode) continueDrawingShape(page.id, e);
+                        }}
+                        onMouseUp={() => {
+                          if (splitMode) finishDrawingSplitLine();
+                          if (circlingMode) finishDrawingShape();
+                        }}
+                        onMouseLeave={() => {
+                          if (splitMode) finishDrawingSplitLine();
+                          if (circlingMode) finishDrawingShape();
+                        }}
                       />
-                      {/* Drawing instructions overlay - only in split mode */}
+                      {/* Drawing instructions overlay - only in split or circle mode */}
                       {splitMode && (
                         <div style={{
                           position: 'absolute',
@@ -2990,6 +3619,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           pointerEvents: 'none'
                         }}>
                           Click & Drag to Draw Split Line
+                        </div>
+                      )}
+                      {circlingMode && selectedShape && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '8px',
+                          right: '8px',
+                          background: 'rgba(233, 30, 99, 0.9)',
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '9px',
+                          fontWeight: 'bold',
+                          zIndex: 270,
+                          pointerEvents: 'none'
+                        }}>
+                          Draw {selectedShape} shape
                         </div>
                       )}
                     </>
@@ -3111,6 +3757,79 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                           ❌
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Circle Shapes Management Buttons */}
+                  {pageCircles[page.id] && pageCircles[page.id].length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '90px',
+                      left: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      zIndex: 260
+                    }}>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await applyCirclesToPage(page.id);
+                        }}
+                        style={{
+                          background: 'rgba(233, 30, 99, 0.9)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          padding: '4px 8px',
+                          fontSize: '9px',
+                          fontWeight: 'bold'
+                        }}
+                        title="Split This Image by Shapes"
+                      >
+                        ⭕ Apply Shapes
+                      </button>
+                      {pageCircles[page.id].map((shape) => (
+                        <button
+                          key={shape.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteCircleShape(page.id, shape.id);
+                          }}
+                          style={{
+                            background: 'rgba(233, 30, 99, 0.9)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            padding: '2px 6px',
+                            fontSize: '8px'
+                          }}
+                          title={`Delete ${shape.type} shape`}
+                        >
+                          🗑️
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Circle shapes indicator */}
+                  {pageCircles[page.id] && pageCircles[page.id].length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '30px',
+                      left: '8px',
+                      background: 'rgba(233, 30, 99, 0.9)',
+                      color: 'white',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      zIndex: 260,
+                      border: '1px solid rgba(255, 255, 255, 0.3)'
+                    }}>
+                      ⭕ {pageCircles[page.id].length} shape{pageCircles[page.id].length > 1 ? 's' : ''}
                     </div>
                   )}
 
@@ -4054,6 +4773,154 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             >
               📦 Final ZIP Export
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Shape Selector Floating Window */}
+      {showShapeSelector && (
+        <div
+          style={{
+            position: 'fixed',
+            left: shapeSelectorPosition.x,
+            top: shapeSelectorPosition.y,
+            width: shapeSelectorSize.width,
+            height: shapeSelectorSize.height,
+            background: 'white',
+            border: '2px solid #E91E63',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            zIndex: 2000,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            resize: 'both',
+            minWidth: '400px',
+            minHeight: '300px'
+          }}
+        >
+          {/* Draggable Header */}
+          <div 
+            style={{
+              background: 'linear-gradient(45deg, #E91E63, #C2185B)',
+              color: 'white',
+              padding: '12px 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'move',
+              borderRadius: '10px 10px 0 0'
+            }}
+            onMouseDown={handleShapeSelectorDrag}
+          >
+            <span style={{ fontSize: '16px', fontWeight: 'bold' }}>
+              ⭕ Shape Selector {selectedShape && `- Selected: ${availableShapes.find(s => s.type === selectedShape)?.name}`}
+            </span>
+            <button
+              onClick={() => setShowShapeSelector(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '0',
+                width: '24px',
+                height: '24px'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Content */}
+          <div style={{ 
+            flex: 1, 
+            padding: '16px',
+            overflow: 'auto',
+            background: '#f9f9f9'
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+              gap: '12px',
+              marginBottom: '16px'
+            }}>
+              {availableShapes.map((shape, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSelectedShape(shape.type === selectedShape ? null : shape.type)}
+                  style={{
+                    background: selectedShape === shape.type 
+                      ? 'linear-gradient(45deg, #E91E63, #C2185B)' 
+                      : 'linear-gradient(45deg, #E0E0E0, #BDBDBD)',
+                    border: selectedShape === shape.type ? '3px solid #AD1457' : '2px solid #999',
+                    borderRadius: '8px',
+                    padding: '16px 12px',
+                    cursor: 'pointer',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                    color: selectedShape === shape.type ? 'white' : '#333',
+                    transition: 'all 0.2s ease',
+                    minHeight: '80px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transform: selectedShape === shape.type ? 'scale(1.05)' : 'scale(1)',
+                    boxShadow: selectedShape === shape.type ? '0 4px 12px rgba(233, 30, 99, 0.4)' : '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                  title={shape.name}
+                >
+                  <div style={{ fontSize: '28px' }}>{shape.icon}</div>
+                  <div style={{ fontSize: '12px', textAlign: 'center' }}>{shape.name.split(' ')[1]}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Control Buttons */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button
+                onClick={undoLastCircle}
+                disabled={circleHistory.length === 0}
+                style={{
+                  background: circleHistory.length === 0
+                    ? 'linear-gradient(45deg, #666, #555)'
+                    : 'linear-gradient(45deg, #f44336, #d32f2f)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  color: 'white',
+                  cursor: circleHistory.length === 0 ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  opacity: circleHistory.length === 0 ? 0.5 : 1,
+                  flex: 1
+                }}
+                title={circleHistory.length === 0 ? 'No shapes to undo' : 'Undo last shape drawing'}
+              >
+                ↶ Undo
+              </button>
+            </div>
+
+            {/* Instructions */}
+            <div style={{
+              padding: '12px',
+              background: 'rgba(233, 30, 99, 0.1)',
+              borderRadius: '8px',
+              fontSize: '12px',
+              color: '#C2185B',
+              lineHeight: '1.4'
+            }}>
+              <strong>📝 How to use Circling:</strong><br/>
+              1. Select a shape from the options above<br/>
+              2. Click and drag on images to draw the selected shape<br/>
+              3. Each shape will have 8 resize handles when selected<br/>
+              4. Use "Apply Shapes" button to split image by drawn shapes<br/>
+              5. Shapes can be deleted using the 🗑️ button<br/>
+              6. Use "Apply to All" checkbox to apply to all pages
+            </div>
           </div>
         </div>
       )}
