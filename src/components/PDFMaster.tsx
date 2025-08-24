@@ -112,6 +112,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [showGroupTags, setShowGroupTags] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [pageGroups, setPageGroups] = useState<{[pageId: string]: string}>({});
+  const [groupHistory, setGroupHistory] = useState<{pageId: string, tag: string}[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([
     '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟',
     '1️⃣1️⃣', '1️⃣2️⃣', '1️⃣3️⃣', '1️⃣4️⃣', '1️⃣5️⃣', '1️⃣6️⃣', '1️⃣7️⃣', '1️⃣8️⃣', '1️⃣9️⃣', '2️⃣0️⃣'
@@ -157,6 +158,9 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const assignTagToPage = (pageId: string) => {
     if (!selectedTag || !groupMode) return;
     
+    // Add to history for undo functionality
+    setGroupHistory(prev => [...prev, { pageId, tag: selectedTag }]);
+    
     setPageGroups(prev => ({
       ...prev,
       [pageId]: selectedTag
@@ -169,6 +173,22 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
       delete newGroups[pageId];
       return newGroups;
     });
+  };
+
+  const undoLastGrouping = () => {
+    if (groupHistory.length === 0) return;
+    
+    const lastAction = groupHistory[groupHistory.length - 1];
+    
+    // Remove the last assigned tag
+    setPageGroups(prev => {
+      const newGroups = { ...prev };
+      delete newGroups[lastAction.pageId];
+      return newGroups;
+    });
+    
+    // Remove from history
+    setGroupHistory(prev => prev.slice(0, -1));
   };
 
   const getGroupedPages = () => {
@@ -2816,8 +2836,8 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   {index + 1}
                 </div>
 
-                {/* Group Tag Badge */}
-                {pageGroups[page.id] && (
+                {/* Group Tag Badge - Only show when group mode is active */}
+                {pageGroups[page.id] && groupMode && (
                   <div style={{
                     position: "absolute",
                     top: "5px",
@@ -2835,15 +2855,13 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                     border: "2px solid white",
                     boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
                     minWidth: "35px",
-                    cursor: groupMode ? 'pointer' : 'default'
+                    cursor: 'pointer'
                   }}
                   onClick={(e) => {
-                    if (groupMode) {
-                      e.stopPropagation();
-                      removeTagFromPage(page.id);
-                    }
+                    e.stopPropagation();
+                    removeTagFromPage(page.id);
                   }}
-                  title={groupMode ? "Click to remove tag" : `Group: ${pageGroups[page.id]}`}
+                  title="Click to remove tag"
                 >
                     {pageGroups[page.id]}
                   </div>
@@ -3653,31 +3671,53 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               ))}
             </div>
 
-            {/* Add More Tags Button */}
-            <button
-              onClick={addMoreTags}
-              disabled={availableTags.length >= 50}
-              style={{
-                background: availableTags.length >= 50 
-                  ? 'linear-gradient(45deg, #666, #555)' 
-                  : 'linear-gradient(45deg, #2196F3, #1976D2)',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '10px 16px',
-                color: 'white',
-                cursor: availableTags.length >= 50 ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold',
-                fontSize: '14px',
-                width: '100%',
-                opacity: availableTags.length >= 50 ? 0.5 : 1
-              }}
-            >
-              {availableTags.length >= 50 ? '🚫 Maximum tags reached' : '➕ Add More Tags'}
-            </button>
+            {/* Control Buttons */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button
+                onClick={addMoreTags}
+                disabled={availableTags.length >= 50}
+                style={{
+                  background: availableTags.length >= 50 
+                    ? 'linear-gradient(45deg, #666, #555)' 
+                    : 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  color: 'white',
+                  cursor: availableTags.length >= 50 ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  flex: 1,
+                  opacity: availableTags.length >= 50 ? 0.5 : 1
+                }}
+              >
+                {availableTags.length >= 50 ? '🚫 Maximum tags reached' : '➕ Add More Tags'}
+              </button>
+              
+              <button
+                onClick={undoLastGrouping}
+                disabled={groupHistory.length === 0}
+                style={{
+                  background: groupHistory.length === 0
+                    ? 'linear-gradient(45deg, #666, #555)'
+                    : 'linear-gradient(45deg, #f44336, #d32f2f)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  color: 'white',
+                  cursor: groupHistory.length === 0 ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  opacity: groupHistory.length === 0 ? 0.5 : 1
+                }}
+                title={groupHistory.length === 0 ? 'No grouping to undo' : 'Undo last grouping'}
+              >
+                ↶ Undo
+              </button>
+            </div>
 
             {/* Instructions */}
             <div style={{
-              marginTop: '16px',
               padding: '12px',
               background: 'rgba(156, 39, 176, 0.1)',
               borderRadius: '8px',
@@ -3688,8 +3728,9 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               <strong>📝 How to use:</strong><br/>
               1. Select a tag by clicking on it<br/>
               2. Click on images to assign the selected tag<br/>
-              3. Create different groups with different tags<br/>
-              4. Use GroupZip to export separate PDFs for each group
+              3. Use "Undo" button to remove the last assigned tag<br/>
+              4. Create different groups with different tags<br/>
+              5. Use GroupZip to export separate PDFs for each group
             </div>
           </div>
         </div>
