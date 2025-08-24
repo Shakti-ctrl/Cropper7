@@ -2,10 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
 
-// Set up PDF.js worker - use CDN for better compatibility
+// Set up PDF.js worker - use local worker for reliability  
 if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.js';
-  console.log('PDF Worker loaded from CDN');
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
+  console.log('PDF Worker loaded locally');
 }
 
 interface SplitLine {
@@ -711,9 +711,11 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             updateProcessingJob(jobId, { message: `Loading PDF: ${file.name}` });
             const arrayBuffer = await file.arrayBuffer();
 
-            // Simplified PDF.js configuration for maximum compatibility
+            // Enhanced PDF.js configuration with proper error handling
             const loadingTask = pdfjs.getDocument({
               data: arrayBuffer,
+              useWorkerFetch: false,
+              isEvalSupported: false,
               verbosity: 0
             });
 
@@ -807,7 +809,18 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             }
           } catch (pdfError) {
             console.error('Error processing PDF:', pdfError);
-            const errorMessage = pdfError instanceof Error ? pdfError.message : 'Unknown error';
+            let errorMessage = 'Unknown error occurred.';
+            if (pdfError instanceof Error) {
+              if (pdfError.message.includes('worker')) {
+                errorMessage = 'PDF worker failed to load. Please refresh the page and try again.';
+              } else if (pdfError.message.includes('fetch')) {
+                errorMessage = 'Failed to load PDF worker. Check your internet connection.';
+              } else if (pdfError.message.includes('fake worker')) {
+                errorMessage = 'PDF processing system error. Please try uploading a different PDF file.';
+              } else {
+                errorMessage = pdfError.message;
+              }
+            }
             completeProcessingJob(jobId, 'error', `❌ Error processing ${file.name}: ${errorMessage}`);
           }
         } else {
