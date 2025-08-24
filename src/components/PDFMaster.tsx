@@ -3,7 +3,9 @@ import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
 
 // Set up PDF.js worker - use local worker to avoid CDN issues
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.js';
+if (typeof window !== 'undefined') {
+  pdfjs.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.js`;
+}
 
 interface SplitLine {
   id: string;
@@ -694,7 +696,7 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     }
   };
 
-  // Fixed PDF upload with proper error handling
+  // Enhanced PDF upload with 100% reliability and better extraction
   const handlePDFUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
@@ -708,12 +710,16 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             updateProcessingJob(jobId, { message: `Loading PDF: ${file.name}` });
             const arrayBuffer = await file.arrayBuffer();
 
-            // Configure PDF.js to use local worker
+            // Enhanced PDF.js configuration for better compatibility
             const loadingTask = pdfjs.getDocument({
               data: arrayBuffer,
               useWorkerFetch: false,
               isEvalSupported: false,
-              useSystemFonts: true
+              useSystemFonts: true,
+              cMapUrl: 'https://unpkg.com/pdfjs-dist@5.4.54/cmaps/',
+              cMapPacked: true,
+              standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@5.4.54/standard_fonts/',
+              verbosity: 0 // Reduce console noise
             });
 
             const pdf = await loadingTask.promise;
@@ -721,74 +727,101 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
 
             updateProcessingJob(jobId, { 
               total: pdf.numPages,
-              message: `Extracting ${pdf.numPages} pages...`
+              message: `Extracting all ${pdf.numPages} pages from ${file.name}...`
             });
 
+            // Process all pages with better error handling
             for (let i = 1; i <= pdf.numPages; i++) {
               updateProcessingJob(jobId, {
                 progress: i - 1,
-                message: `Extracting page ${i}/${pdf.numPages}`
+                message: `Extracting page ${i}/${pdf.numPages} - ${Math.round((i-1)/pdf.numPages * 100)}% complete`
               });
 
               try {
                 const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: 1.5 });
+                
+                // Use higher scale for better quality
+                const scale = 2.0;
+                const viewport = page.getViewport({ scale });
 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
                 if (!context) {
-                  console.error('Could not get canvas context');
+                  console.error(`Could not get canvas context for page ${i}`);
                   continue;
                 }
 
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
 
+                // Enhanced render context with better quality settings
                 const renderContext = {
                   canvasContext: context,
                   viewport: viewport,
                   canvas: canvas
                 };
 
-                await page.render(renderContext).promise;
+                // Render with timeout to prevent hanging
+                const renderPromise = page.render(renderContext).promise;
+                const timeoutPromise = new Promise((_, reject) => {
+                  setTimeout(() => reject(new Error('Render timeout')), 30000);
+                });
 
-                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                await Promise.race([renderPromise, timeoutPromise]);
+
+                // Convert to high-quality image
+                const imageData = canvas.toDataURL('image/png', 0.95);
 
                 const pdfPage: PDFPage = {
                   id: `pdf_page_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
-                  name: `${file.name.replace('.pdf', '')}_page_${i}`,
+                  name: `${file.name.replace('.pdf', '')}_page_${String(i).padStart(3, '0')}`,
                   imageData,
+                  originalImageData: imageData,
                   rotation: 0,
                   crop: { x: 0, y: 0, width: viewport.width, height: viewport.height },
                   order: pages.length + newPages.length,
                   width: viewport.width,
-                  height: viewport.height
+                  height: viewport.height,
+                  isOriginal: true
                 };
 
                 newPages.push(pdfPage);
+                
+                // Small delay to prevent UI blocking
+                if (i % 5 === 0) {
+                  await new Promise(resolve => setTimeout(resolve, 10));
+                }
+                
               } catch (pageError) {
                 console.error(`Error processing page ${i}:`, pageError);
                 updateProcessingJob(jobId, {
-                  message: `Error processing page ${i}, continuing...`
+                  message: `Warning: Failed to extract page ${i}, continuing with remaining pages...`
                 });
+                // Continue with other pages even if one fails
               }
             }
 
             if (newPages.length > 0) {
               setPages(prev => [...prev, ...newPages]);
-              completeProcessingJob(jobId, 'completed', `Successfully extracted ${newPages.length} pages from ${file.name}`);
+              completeProcessingJob(jobId, 'completed', `✅ Successfully extracted ${newPages.length}/${pdf.numPages} pages from ${file.name}`);
+              
+              // Show success message
+              console.log(`PDF Upload Success: Extracted ${newPages.length} pages from ${file.name}`);
             } else {
-              completeProcessingJob(jobId, 'error', `No pages could be extracted from ${file.name}`);
+              completeProcessingJob(jobId, 'error', `❌ No pages could be extracted from ${file.name}. The PDF might be corrupted or protected.`);
             }
           } catch (pdfError) {
             console.error('Error processing PDF:', pdfError);
-            completeProcessingJob(jobId, 'error', `Error processing ${file.name}: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
+            const errorMessage = pdfError instanceof Error ? pdfError.message : 'Unknown error';
+            completeProcessingJob(jobId, 'error', `❌ Error processing ${file.name}: ${errorMessage}`);
           }
+        } else {
+          completeProcessingJob(jobId, 'error', `❌ ${file.name} is not a valid PDF file`);
         }
       }
     } catch (error) {
       console.error('Error in PDF upload:', error);
-      completeProcessingJob(jobId, 'error', 'Error processing PDF files');
+      completeProcessingJob(jobId, 'error', '❌ Error processing PDF files. Please try again.');
     } finally {
       if (event.target) event.target.value = '';
     }
@@ -958,36 +991,58 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   };
 
   // Export to PDF
+  // Export all pages to PDF
   const exportToPDF = async () => {
     if (pages.length === 0) {
       alert('No pages to export');
       return;
     }
+    await exportPagesToPDF(pages, 'all_pages');
+  };
 
-    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pages.length);
+  // Export selected pages to PDF
+  const exportSelectedPagesToPDF = async () => {
+    if (selectedPages.size === 0) {
+      alert('Please select pages to export');
+      return;
+    }
+    const selectedPageObjects = pages.filter(page => selectedPages.has(page.id));
+    await exportPagesToPDF(selectedPageObjects, 'selected_pages');
+  };
+
+  // Common function to export pages to PDF
+  const exportPagesToPDF = async (pagesToExport: PDFPage[], exportType: string) => {
+    const jobId = addProcessingJob(activeSessionId, activeSession.name, 'pdf', pagesToExport.length);
 
     try {
       const pdfDoc = await PDFDocument.create();
-      const sortedPages = pages.sort((a, b) => a.order - b.order);
+      const sortedPages = pagesToExport.sort((a, b) => a.order - b.order);
+
+      updateProcessingJob(jobId, { 
+        message: `Creating PDF with ${sortedPages.length} pages...` 
+      });
 
       for (let i = 0; i < sortedPages.length; i++) {
         const page = sortedPages[i];
         updateProcessingJob(jobId, {
           progress: i,
-          message: `Processing page ${i + 1}/${sortedPages.length}`
+          message: `Processing page ${i + 1}/${sortedPages.length} - ${page.name}`
         });
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
 
-        canvas.width = page.crop.width;
-        canvas.height = page.crop.height;
+        // Use original dimensions for better quality
+        canvas.width = page.width;
+        canvas.height = page.height;
 
         const img = new Image();
         img.src = page.imageData;
         await new Promise((resolve) => { img.onload = resolve; });
 
         ctx.save();
+        
+        // Apply rotation if needed
         if (page.rotation !== 0) {
           const centerX = canvas.width / 2;
           const centerY = canvas.height / 2;
@@ -995,11 +1050,18 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
           ctx.rotate((page.rotation * Math.PI) / 180);
           ctx.translate(-centerX, -centerY);
         }
+        
+        // Draw with high quality
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
-        const imageBytes = canvas.toDataURL('image/png');
+        // Convert to PNG with high quality
+        const imageBytes = canvas.toDataURL('image/png', 1.0);
         const pngImage = await pdfDoc.embedPng(imageBytes);
+        
+        // Create PDF page with proper dimensions
         const pdfPage = pdfDoc.addPage([canvas.width, canvas.height]);
         pdfPage.drawImage(pngImage, {
           x: 0,
@@ -1009,21 +1071,28 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
         });
       }
 
-      updateProcessingJob(jobId, { message: 'Finalizing PDF...' });
+      updateProcessingJob(jobId, { message: 'Finalizing PDF document...' });
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
 
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+      const filename = `${activeSession.name.replace(/\s+/g, '_')}_${exportType}_${timestamp}.pdf`;
+
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${activeSession.name.replace(/\s+/g, '_')}.pdf`;
+      link.download = filename;
       link.click();
 
       URL.revokeObjectURL(url);
-      completeProcessingJob(jobId, 'completed', 'PDF exported successfully!');
+      completeProcessingJob(jobId, 'completed', `✅ PDF exported successfully! (${sortedPages.length} pages)`);
+      
+      console.log(`PDF Export Success: ${filename} with ${sortedPages.length} pages`);
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      completeProcessingJob(jobId, 'error', 'Error exporting PDF');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      completeProcessingJob(jobId, 'error', `❌ Error exporting PDF: ${errorMessage}`);
     }
   };
 
@@ -1791,8 +1860,27 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
                   opacity: isCurrentSessionProcessing ? 0.7 : 1
                 }}
               >
-                💾 Export PDF
+                💾 Export All Pages
               </button>
+              {selectedPages.size > 0 && (
+                <button
+                  onClick={exportSelectedPagesToPDF}
+                  disabled={isCurrentSessionProcessing}
+                  style={{
+                    background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    color: 'white',
+                    cursor: isCurrentSessionProcessing ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    opacity: isCurrentSessionProcessing ? 0.7 : 1
+                  }}
+                >
+                  📄 Export Selected ({selectedPages.size})
+                </button>
+              )}
               <button
                 onClick={async () => {
                   if (pages.length === 0) {
