@@ -1635,6 +1635,25 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 Clear
               </button>
+              {selectedPages.size > 0 && (
+                <button
+                  onClick={() => {
+                    selectedPages.forEach(pageId => deletePage(pageId));
+                    setSelectedPages(new Set());
+                  }}
+                  style={{
+                    background: 'rgba(244, 67, 54, 0.2)',
+                    border: '1px solid rgba(244, 67, 54, 0.3)',
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    color: '#f44336',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  🗑️ Delete Selected
+                </button>
+              )}
               <button
                 onClick={handleRearrangeClick}
                 style={{
