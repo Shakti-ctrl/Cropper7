@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist';
 
-// Set up PDF.js worker - use local worker to avoid CDN issues
+// Set up PDF.js worker - use CDN for better compatibility
 if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.js`;
+  pdfjs.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.js';
+  console.log('PDF Worker loaded from CDN');
 }
 
 interface SplitLine {
@@ -710,16 +711,10 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
             updateProcessingJob(jobId, { message: `Loading PDF: ${file.name}` });
             const arrayBuffer = await file.arrayBuffer();
 
-            // Enhanced PDF.js configuration for better compatibility
+            // Simplified PDF.js configuration for maximum compatibility
             const loadingTask = pdfjs.getDocument({
               data: arrayBuffer,
-              useWorkerFetch: false,
-              isEvalSupported: false,
-              useSystemFonts: true,
-              cMapUrl: 'https://unpkg.com/pdfjs-dist@5.4.54/cmaps/',
-              cMapPacked: true,
-              standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@5.4.54/standard_fonts/',
-              verbosity: 0 // Reduce console noise
+              verbosity: 0
             });
 
             const pdf = await loadingTask.promise;
