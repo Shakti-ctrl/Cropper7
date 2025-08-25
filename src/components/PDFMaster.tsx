@@ -125,6 +125,13 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
   const [customNamesPosition, setCustomNamesPosition] = useState({ x: 200, y: 200 });
   const [customNamesSize, setCustomNamesSize] = useState({ width: 500, height: 400 });
 
+  // Tag Page Range functionality
+  const [showTagPageRange, setShowTagPageRange] = useState(false);
+  const [tagPageRangePosition, setTagPageRangePosition] = useState({ x: 250, y: 200 });
+  const [tagPageRangeSize, setTagPageRangeSize] = useState({ width: 450, height: 400 });
+  const [selectedRangeTag, setSelectedRangeTag] = useState<string | null>(null);
+  const [pageRangeInput, setPageRangeInput] = useState<string>('');
+
   // Circling functionality
   interface CircleShape {
     id: string;
@@ -533,6 +540,78 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
     const currentLength = availableTags.length;
     const newTags = nextNumbers.slice(0, Math.min(10, 50 - currentLength));
     setAvailableTags(prev => [...prev, ...newTags]);
+  };
+
+  // Tag Page Range functions
+  const handleTagPageRangeDrag = (e: React.MouseEvent) => {
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPos = tagPageRangePosition;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = startPos.x + (e.clientX - startX);
+      const newY = startPos.y + (e.clientY - startY);
+      setTagPageRangePosition({ x: Math.max(0, newX), y: Math.max(0, newY) });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const applyTagToPageRange = () => {
+    if (!selectedRangeTag || !pageRangeInput.trim()) {
+      alert('Please select a tag and enter page numbers');
+      return;
+    }
+
+    try {
+      const ranges = pageRangeInput.split(',').map(s => s.trim());
+      const pageIndices: number[] = [];
+
+      ranges.forEach(range => {
+        if (range.includes('-')) {
+          const [start, end] = range.split('-').map(n => parseInt(n.trim()));
+          if (start && end && start <= end) {
+            for (let i = start; i <= end; i++) {
+              if (i >= 1 && i <= pages.length) {
+                pageIndices.push(i - 1);
+              }
+            }
+          }
+        } else {
+          const pageNum = parseInt(range);
+          if (pageNum >= 1 && pageNum <= pages.length) {
+            pageIndices.push(pageNum - 1);
+          }
+        }
+      });
+
+      if (pageIndices.length === 0) {
+        alert('No valid page numbers found');
+        return;
+      }
+
+      pageIndices.forEach(index => {
+        const pageId = pages[index]?.id;
+        if (pageId) {
+          setGroupHistory(prev => [...prev, { pageId, tag: selectedRangeTag }]);
+          setPageGroups(prev => ({
+            ...prev,
+            [pageId]: selectedRangeTag
+          }));
+        }
+      });
+
+      setPageRangeInput('');
+      alert(`Applied tag ${selectedRangeTag} to ${pageIndices.length} pages`);
+    } catch (error) {
+      alert('Invalid format. Use comma-separated numbers or ranges (e.g., 1,3,5-8,10)');
+    }
   };
 
   const assignTagToPage = (pageId: string) => {
@@ -4627,6 +4706,23 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               >
                 ↶ Undo
               </button>
+
+              <button
+                onClick={() => setShowTagPageRange(true)}
+                style={{
+                  background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '14px'
+                }}
+                title="Add Tag Page Range"
+              >
+                📄 Add Tag Page Range
+              </button>
             </div>
 
             {/* Instructions */}
@@ -5033,6 +5129,210 @@ export const PDFMaster: React.FC<PDFMasterProps> = ({ isVisible, onClose }) => {
               4. Use "Apply Shapes" button to split image by drawn shapes<br/>
               5. Shapes can be deleted using the 🗑️ button<br/>
               6. Use "Apply to All" checkbox to apply to all pages
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tag Page Range Floating Window */}
+      {showTagPageRange && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tagPageRangePosition.x,
+            top: tagPageRangePosition.y,
+            width: tagPageRangeSize.width,
+            height: tagPageRangeSize.height,
+            background: 'white',
+            border: '2px solid #FF9800',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            zIndex: 2000,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            resize: 'both',
+            minWidth: '400px',
+            minHeight: '350px'
+          }}
+        >
+          {/* Draggable Header */}
+          <div 
+            style={{
+              background: 'linear-gradient(45deg, #FF9800, #F57C00)',
+              color: 'white',
+              padding: '12px 16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'move',
+              borderRadius: '10px 10px 0 0'
+            }}
+            onMouseDown={handleTagPageRangeDrag}
+          >
+            <span style={{ fontSize: '16px', fontWeight: 'bold' }}>
+              📄 Add Tag Page Range {selectedRangeTag && `- Selected: ${selectedRangeTag}`}
+            </span>
+            <button
+              onClick={() => setShowTagPageRange(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '18px',
+                padding: '0',
+                width: '24px',
+                height: '24px'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Content */}
+          <div style={{ 
+            flex: 1, 
+            padding: '16px',
+            overflow: 'auto',
+            background: '#f9f9f9'
+          }}>
+            {/* Tags Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#FF9800' }}>Select Tag:</h4>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(60px, 1fr))',
+                gap: '8px',
+                marginBottom: '16px',
+                maxHeight: '120px',
+                overflowY: 'auto',
+                padding: '8px',
+                background: 'white',
+                borderRadius: '6px',
+                border: '1px solid #ddd'
+              }}>
+                {availableTags.map((tag, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedRangeTag(tag === selectedRangeTag ? null : tag)}
+                    style={{
+                      background: selectedRangeTag === tag 
+                        ? 'linear-gradient(45deg, #FF9800, #F57C00)' 
+                        : 'linear-gradient(45deg, #E0E0E0, #BDBDBD)',
+                      border: selectedRangeTag === tag ? '2px solid #E65100' : '1px solid #999',
+                      borderRadius: '6px',
+                      padding: '8px 4px',
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      color: selectedRangeTag === tag ? 'white' : '#333',
+                      transition: 'all 0.2s ease',
+                      minHeight: '45px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transform: selectedRangeTag === tag ? 'scale(1.1)' : 'scale(1)'
+                    }}
+                    title={`Tag: ${tag}`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => {
+                  const nextNumbers = ['2️⃣1️⃣', '2️⃣2️⃣', '2️⃣3️⃣', '2️⃣4️⃣', '2️⃣5️⃣', '2️⃣6️⃣', '2️⃣7️⃣', '2️⃣8️⃣', '2️⃣9️⃣', '3️⃣0️⃣'];
+                  const currentLength = availableTags.length;
+                  const newTags = nextNumbers.slice(0, Math.min(10, 50 - currentLength));
+                  setAvailableTags(prev => [...prev, ...newTags]);
+                }}
+                disabled={availableTags.length >= 50}
+                style={{
+                  background: availableTags.length >= 50 
+                    ? 'linear-gradient(45deg, #666, #555)' 
+                    : 'linear-gradient(45deg, #2196F3, #1976D2)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  color: 'white',
+                  cursor: availableTags.length >= 50 ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '12px',
+                  opacity: availableTags.length >= 50 ? 0.5 : 1
+                }}
+              >
+                {availableTags.length >= 50 ? '🚫 Max tags' : '➕ Add More Number Tags'}
+              </button>
+            </div>
+
+            {/* Page Range Input */}
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#FF9800' }}>Page Numbers/Ranges:</h4>
+              <input
+                type="text"
+                value={pageRangeInput}
+                onChange={(e) => setPageRangeInput(e.target.value)}
+                placeholder="e.g., 1,3,5-8,10-12"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '2px solid #FF9800',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  background: 'white'
+                }}
+              />
+              <p style={{ 
+                fontSize: '11px', 
+                color: '#666', 
+                margin: '4px 0 0 0',
+                fontStyle: 'italic'
+              }}>
+                Enter page numbers separated by commas. Use hyphen for ranges (e.g., 1,3,5-8,10)
+              </p>
+            </div>
+
+            {/* Apply Button */}
+            <button
+              onClick={applyTagToPageRange}
+              disabled={!selectedRangeTag || !pageRangeInput.trim()}
+              style={{
+                background: (!selectedRangeTag || !pageRangeInput.trim())
+                  ? 'linear-gradient(45deg, #666, #555)'
+                  : 'linear-gradient(45deg, #4CAF50, #45a049)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '16px 24px',
+                color: 'white',
+                cursor: (!selectedRangeTag || !pageRangeInput.trim()) ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                fontSize: '16px',
+                width: '100%',
+                opacity: (!selectedRangeTag || !pageRangeInput.trim()) ? 0.5 : 1
+              }}
+            >
+              🏷️ Apply Tag to Pages
+            </button>
+
+            {/* Instructions */}
+            <div style={{
+              padding: '12px',
+              background: 'rgba(255, 152, 0, 0.1)',
+              borderRadius: '8px',
+              fontSize: '12px',
+              color: '#F57C00',
+              lineHeight: '1.4',
+              marginTop: '16px'
+            }}>
+              <strong>📝 How to use Tag Page Range:</strong><br/>
+              1. Select a tag from the grid above<br/>
+              2. Enter page numbers or ranges in the input field<br/>
+              3. Use commas to separate multiple pages (e.g., 1,3,5)<br/>
+              4. Use hyphen for ranges (e.g., 5-8 means pages 5,6,7,8)<br/>
+              5. Click "Apply Tag to Pages" to assign the tag<br/>
+              6. You can mix single pages and ranges (e.g., 1,3,5-8,10-12)
             </div>
           </div>
         </div>
